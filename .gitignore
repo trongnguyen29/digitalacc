@@ -1,2 +1,2 @@
-*.vti
+python/*.vti
 node_modules/
