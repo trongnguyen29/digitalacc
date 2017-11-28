@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta http-equiv="Content-type" content="text/html; charset=utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Digital aCC</title>
+  <link rel="stylesheet" type="text/css" href="css/ourstyle.css"/>
+</head>
+
+<body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/88/three.min.js"></script>
+  <script src="js/OrbitControls.js"></script>
+  <script src="js/OBJLoader.js"></script>
+  <div id="main-wrap">
+    <div id="left">
+      <div id="vtkjs"></div>
+    </div>
+    <div id="right">
+      <div id="top">
+        <div id="mytemplate" style="height:100%;width:100%"></div>
+      </div>
+      <div id="bottom">
+        <div id="mynetwork" onresize="ppifit()" style="height:100%;width:100%"></div>
+      </div>
+    </div>
+  </div>
+  <div id="footer">
+    <div id="content">
+      Time<br>
+      <input type="range" min="1" max="1" step="1" value="1" class="slider" id="volumetime">
+    </div>
+    <div id="content">
+      Image<br>
+      <select id="selectedvolume">
+      </select>
+    </div>
+    <div id="content">
+        Viewer<br>
+        <select id="viewmode">
+          <option value="IsoSurface">IsoSurface</option>
+          <option value="VolumeRender">VolumeRender</option>
+        </select>
+      </div>
+      <div id="content">
+        Version 1.0.0<br>
+        Last update: Nov 28, 2017
+      </div>
+  </div>
+  <script type="text/javascript" src="digitalacc.js"></script>
+</body>
+</html>

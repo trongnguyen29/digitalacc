@@ -1,0 +1,55 @@
+/* layout */
+html,
+body {
+  height: calc(100% - 25px);
+}
+
+#main-wrap {
+  /* overflow to handle inner floating block */
+  overflow: hidden;
+  height: 100%;
+  /* min-height: 450px; */
+  background-color: #D9D9D9;
+}
+
+#left {
+  float: left;
+  width: 50%;
+  height: 100%;
+}
+
+#right {
+  float: right;
+  width: 50%;
+  height: 100%;
+}
+
+#top {
+  min-height: 80px;
+  height: 50%;
+}
+
+#bottom {
+  min-height: 80px;
+  height: 50%;
+}
+
+#footer {
+  /* overflow to handle inner floating block */
+  height: 40px;
+  background-color: #a9a9a9;
+}
+
+#content {
+  overflow: hidden;
+  float: left;
+  width: 25%;
+  height: 40px;
+}
+
+/* protein network */
+#mynetwork {
+  width: 600px;
+  height: 400px;
+  border: 1px solid lightgray;
+}

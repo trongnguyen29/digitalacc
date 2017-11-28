@@ -1,0 +1,36 @@
+{
+  "name": "digitalacc",
+  "version": "1.0.0",
+  "description": "Online protein interaction visualization of aCC volumes",
+  "main": "src/index.js",
+  "scripts": {
+    "build": "webpack",
+    "build:release": "webpack -p",
+    "start": "webpack-dev-server --content-base ./dist",
+    "commit": "git cz",
+    "semantic-release": "semantic-release pre && npm publish && semantic-release post",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://yosarun@github.com/yosarun/digitalacc.git"
+  },
+  "keywords": [
+    "Web",
+    "visualization",
+    "aCC",
+    "protein",
+    "interaction"
+  ],
+  "author": "Sarun Gulyanon",
+  "license": "BSD-2-Clause",
+  "bugs": {
+    "url": "https://github.com/yosarun/digitalacc/issues"
+  },
+  "homepage": "https://github.com/yosarun/digitalacc#readme",
+  "devDependencies": {
+    "kw-web-suite": "^4.0.1",
+    "vis": "^4.21.0",
+    "vtk.js": "^5.6.1"
+  }
+}
