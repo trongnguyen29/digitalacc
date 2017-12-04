@@ -39,7 +39,7 @@ export function viewIsoSurface(urlToLoad, div_id) {
   const fullScreenRenderWindow = vtkFullScreenRenderWindow.newInstance({
     rootContainer: vtkcontainer,
     background: [0, 0, 0],
-    containerStyle: { height: 'calc(100vh - 55px)', width: 'calc(50vw - 10px)', position: 'absolute' }
+    containerStyle: { height: 'calc(100vh - 57px)', width: 'calc(50vw - 10px)', position: 'absolute' }
   });
   const renderWindow = fullScreenRenderWindow.getRenderWindow();
   const renderer = fullScreenRenderWindow.getRenderer();
@@ -60,7 +60,7 @@ export function viewIsoSurface(urlToLoad, div_id) {
     lookupTable
   });
   const marchingCube = vtkImageMarchingCubes.newInstance({ contourValue: 0.0, computeNormals: true, mergePoints: true });
-
+  marchingCube.setComputeNormals(true);
   // Set isosurface color
   const filter = vtkCalculator.newInstance();
   
@@ -137,6 +137,19 @@ export function viewIsoSurface(urlToLoad, div_id) {
   global.filter = filter;
 
   resetProteinPair();
+
+  // console.log(renderWindow);
+  // fullScreenRenderWindow.setResizeCallback(function () {
+  //   console.log("D");
+  //   const renderWindow = global.isoscreen.getRenderWindow();
+  //   global.isoscreen.getRenderer().resetCamera();
+  //   renderWindow.render();
+  // });
+  // renderWindow.addObserver();
+  // window.addEventListener('resize', function() {
+  //   const renderWindow = global.isoscreen.getRenderWindow();
+  //   renderWindow.render();
+  // }, false);
 }
 
 // ----------------------------------------------------------------------------

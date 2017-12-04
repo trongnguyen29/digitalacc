@@ -1,2 +1,3 @@
 python/*.vti
+python/**/*.tif
 node_modules/

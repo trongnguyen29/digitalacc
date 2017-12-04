@@ -24,7 +24,33 @@ var data = {
   nodes: nodes,
   edges: edges
 };
-var options = {};
+var options = {
+  interaction: {
+    selectConnectedEdges: false
+  },
+  nodes:{
+    borderWidth: 1,
+    borderWidthSelected: 2,
+    chosen: false,
+    color: {
+      border: '#c200c0',
+      background: '#ff7aff',
+    },
+    font: {
+      size: 16 // px
+    }
+  },
+  edges:{
+    width: 5,
+    color: {
+      color:'#fdb2fc',
+      highlight:'#fb3df7'
+    },
+    font: {
+      size: 16 // px
+    }
+  }
+};
 window.network = new vis.Network(container, data, options);
 
 function ppifit() {

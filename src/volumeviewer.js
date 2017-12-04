@@ -25,7 +25,7 @@ export function viewVolumeRender(urlToLoad, div_id) {
   const fullScreenRenderer = vtkFullScreenRenderWindow.newInstance({
     rootContainer: vtkcontainer,
     background: [0, 0, 0],
-    containerStyle: { height: 'calc(100vh - 55px)', width: 'calc(50vw - 10px)', position: 'absolute' }
+    containerStyle: { height: 'calc(100vh - 57px)', width: 'calc(50vw - 10px)', position: 'absolute' }
   });
   const renderWindow = fullScreenRenderer.getRenderWindow();
   const renderer = fullScreenRenderer.getRenderer();
@@ -39,47 +39,12 @@ export function viewVolumeRender(urlToLoad, div_id) {
   widgetContainer.style.background = 'rgba(255, 255, 255, 0.3)';
   vtkcontainer.appendChild(widgetContainer);
 
-  // Create Label for preset
-  const labelContainer = document.createElement('div');
-  labelContainer.style.position = 'absolute';
-  labelContainer.style.top = '5px';
-  labelContainer.style.left = '5px';
-  labelContainer.style.width = '50vw';
-  labelContainer.style.color = 'white';
-  labelContainer.style.textAlign = 'center';
-  labelContainer.style.userSelect = 'none';
-  labelContainer.style.cursor = 'pointer';
-  vtkcontainer.appendChild(labelContainer);
-
   // Code for changing preset
-  let presetIndex = 1;
   const globalDataRange = [0, 255];
   const lookupTable = vtkColorTransferFunction.newInstance();
-  function changePreset(delta = 1) {
-    presetIndex = (presetIndex + delta + vtkColorMaps.rgbPresetNames.length) % vtkColorMaps.rgbPresetNames.length;
-    lookupTable.applyColorMap(vtkColorMaps.getPresetByName(vtkColorMaps.rgbPresetNames[presetIndex]));
-    lookupTable.setMappingRange(...globalDataRange);
-    lookupTable.updateRange();
-    labelContainer.innerHTML = vtkColorMaps.rgbPresetNames[presetIndex];
-  }
-
-  let intervalID = null;
-  function stopInterval() {
-    if (intervalID !== null) {
-      clearInterval(intervalID);
-      intervalID = null;
-    }
-  }
-
-  labelContainer.addEventListener('click', (event) => {
-    if (event.pageX < 200) {
-      stopInterval();
-      changePreset(-1);
-    } else {
-      stopInterval();
-      changePreset(1);
-    }
-  });
+  lookupTable.applyColorMap(vtkColorMaps.getPresetByName("Grayscale"));
+  lookupTable.setMappingRange(...globalDataRange);
+  lookupTable.updateRange();
 
   // Create widget
   const widget = vtkPiecewiseGaussianWidget.newInstance({ numberOfBins: 256, size: [400, 150] });
@@ -102,12 +67,12 @@ export function viewVolumeRender(urlToLoad, div_id) {
   });
   fullScreenRenderer.setResizeCallback(({ width, height }) => {
     widget.setSize(Math.min(450, width - 10), 150);
+    widget.render();
   });
-
 
   const piecewiseFunction = vtkPiecewiseFunction.newInstance();
   const actor = vtkVolume.newInstance();
-  const mapper = vtkVolumeMapper.newInstance({ sampleDistance: 1.1 });
+  const mapper = vtkVolumeMapper.newInstance({ sampleDistance: 1.0 });
 
   // Load data with real-time loading progress
   const progressContainer = document.createElement('div');
@@ -117,24 +82,19 @@ export function viewVolumeRender(urlToLoad, div_id) {
     progressContainer.innerHTML = `Loading ${percent}%`;
   };
 
-  const vtiReader = vtkXMLImageDataReader.newInstance();
+  const volumeReader = vtkXMLImageDataReader.newInstance();
   HttpDataAccessHelper.fetchText({}, urlToLoad, { progressCallback }).then((txt) => {
-    vtiReader.parse(txt);
-    const source = vtiReader.getOutputData(0);
+    volumeReader.parse(txt);
+    const source = volumeReader.getOutputData(0);
 
     // Read data
-    const imageData = vtiReader.getOutputData(0);
+    const imageData = volumeReader.getOutputData(0);
     const dataArray = source.getPointData().getScalars() || source.getPointData().getArrays()[0];
     const dataRange = dataArray.getRange();
 
     globalDataRange[0] = dataRange[0];
     globalDataRange[1] = dataRange[1];
-    // Update Lookup table
-    changePreset();
-    // Automatic switch to next preset every 5s
-    if (!vtkcontainer) {
-      intervalID = setInterval(changePreset, 5000);
-    }
+
     widget.setDataArray(dataArray.getData());
     widget.applyOpacity(piecewiseFunction);
     widget.setColorTransferFunction(lookupTable);
@@ -152,14 +112,14 @@ export function viewVolumeRender(urlToLoad, div_id) {
 
   // Configure VTK pipeline
   actor.setMapper(mapper);
-  mapper.setInputConnection(vtiReader.getOutputPort());
+  mapper.setInputConnection(volumeReader.getOutputPort());
   actor.getProperty().setRGBTransferFunction(0, lookupTable);
   actor.getProperty().setScalarOpacity(0, piecewiseFunction);
-  actor.getProperty().setInterpolationTypeToFastLinear();
+  actor.getProperty().setInterpolationTypeToLinear();
 
   // Default setting Piecewise function widget
-  widget.addGaussian(0.425, 0.5, 0.2, 0.3, 0.2);
-  widget.addGaussian(0.75, 1, 0.3, 0, 0);
+  widget.addGaussian(0.525, 0.5, 0.2, 0.3, 0.2);
+  widget.addGaussian(0.85, 1, 0.3, 0, 0);
   widget.setContainer(widgetContainer);
   widget.bindMouseListeners();
   widget.onAnimation((start) => {
@@ -179,8 +139,8 @@ export function viewVolumeRender(urlToLoad, div_id) {
   // Expose variable to global namespace
   global.fullScreen = fullScreenRenderer;
   global.widget = widget;
+  global.volumeReader = volumeReader;
   global.globalDataRange = globalDataRange;
-  global.changePreset = changePreset;
   global.volfile = urlToLoad;
 }
 
@@ -200,28 +160,24 @@ export function updateVolumeViewer(urlToLoad) {
       progressContainer.innerHTML = `Loading ${percent}%`;
     };
 
-    const vtiReader = vtkXMLImageDataReader.newInstance();
     HttpDataAccessHelper.fetchText({}, urlToLoad, { progressCallback }).then((txt) => {
-      vtiReader.parse(txt);
-      const source = vtiReader.getOutputData(0);
+      global.volumeReader.parse(txt);
+      const source = global.volumeReader.getOutputData(0);
 
       // Read data
-      const imageData = vtiReader.getOutputData(0);
+      const imageData = global.volumeReader.getOutputData(0);
       const dataArray = source.getPointData().getScalars() || source.getPointData().getArrays()[0];
       const dataRange = dataArray.getRange();
 
       global.globalDataRange[0] = dataRange[0];
       global.globalDataRange[1] = dataRange[1];
       // Update Lookup table
-      global.changePreset();
-
       global.widget.setDataArray(dataArray.getData());
 
       // Update renderer
       global.widget.render();
       renderWindow.render();
     });
-
 
     global.volfile = urlToLoad;
   }

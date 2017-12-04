@@ -60,12 +60,15 @@ volumelist.onreadystatechange = function () {
       var volumetime = document.getElementById("volumetime");
       volumetime.max = voltimenum[vid];
       volumetime.value = 1;
+      document.getElementById('volumetimeId').value = volumetime.value;
+      document.getElementById('volumetimeMaxId').value = volumetime.max;
 
       // Initialize left panel (isosurface and volume rendering)
+      viewVolumeRender(getFileName("INTENSITY"), 'volumerenderer');
       viewIsoSurface(getFileName("DISTANCE"), 'isorenderer');
       updateProteinPair(getFileName(null, ['Cdc42', 'WASp']));
       loadLabel(getFileName("LABEL"));
-      viewVolumeRender(getFileName("INTENSITY"), 'volumerenderer');
+      
 
       // Show isosurface first
       document.querySelector('#volumerenderer').style.display = "none";
@@ -77,13 +80,14 @@ volumelist.send(null);
 // ----------------------------------------------------------------------------
 // Add event listener
 // ----------------------------------------------------------------------------
-var voltimenum;
 // Add onchange function for volume selector
 selectedvolume.onchange = function () {
   var vid = document.getElementById("selectedvolume").value;
   var volumetime = document.getElementById("volumetime");
   volumetime.max = voltimenum[vid];
   volumetime.value = 1;
+  document.getElementById('volumetimeId').value = volumetime.value;
+  document.getElementById('volumetimeMaxId').value = volumetime.max; 
 
   var viewmode = document.getElementById("viewmode").value;
   if (viewmode == "VolumeRender") {
@@ -129,6 +133,9 @@ document.getElementById("volumetime").onchange = function () {
   } else {
     console.error("Unknown View Mode");
   }
+  var volumetime = document.getElementById("volumetime");
+  document.getElementById('volumetimeId').value = volumetime.value;
+  document.getElementById('volumetimeMaxId').value = volumetime.max;
 };
 
 // Network

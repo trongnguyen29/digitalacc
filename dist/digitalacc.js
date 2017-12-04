@@ -25320,70 +25320,6 @@ function viewIsoSurface(urlToLoad, div_id) {
     renderWindow.render();
   });
 
-
-  // var vid = document.getElementById("selectedvolume").value;
-  // var volumename = document.getElementById("selectedvolume").options[vid].text;
-  // var volumetime = document.getElementById("volumetime").value.toString();
-  // volumetime = volumetime.length >= 3 ? volumetime : new Array(3 - volumetime.length + 1).join('0') + volumetime;
-  // var ppiToLoad = './data/volume/' + volumename + '/t' + volumetime + '/ppi1/' + volumename + '_ppi.vti';
-  
-  // // Load protein interaction
-  // HttpDataAccessHelper.fetchText({}, ppiToLoad, { progressCallback }).then((txt) => {
-  //   vtiReader.parse(txt);
-
-  //   const source = vtiReader.getOutputData(0);
-  //   const dataArray = source.getPointData().getScalars() || source.getPointData().getArrays()[0];
-  //   const mydata = dataArray.getData();
-  //   const [ww, hh, dd] = source.getDimensions();
-  //   console.log(ww, hh, dd);
-  //   console.log(dataArray.getRange());
-
-  //   filter.setFormula({
-  //     getArrays: inputDataSets => ({
-  //       input: [
-  //         { location: FieldDataTypes.COORDINATE }
-  //       ],
-  //       output: [
-  //         { location: FieldDataTypes.POINT, name: 'Random', dataType: 'Float32Array', attribute: AttributeTypes.SCALARS },
-  //       ],
-  //     }),
-  //     evaluate: (arraysIn, arraysOut) => {
-  //       const [coords] = arraysIn.map(d => d.getData());
-  //       const [scalars] = arraysOut.map(d => d.getData());
-
-  //       console.log(coords.length);
-
-  //       var max_x = 0, min_x = 1000000;
-  //       var max_y = 0, min_y = 1000000;
-  //       var max_z = 0, min_z = 1000000;
-  //       for (let i = 0; i < scalars.length; i++) {
-  //         const dx = (coords[3 * i] / spacing[0]);
-  //         const dy = (coords[(3 * i) + 1] / spacing[1]);
-  //         const dz = (coords[(3 * i) + 2] - 1) / spacing[2];
-
-  //         min_x = min_x <= dx? min_x : dx;
-  //         min_y = min_y <= dy? min_y : dy;
-  //         min_z = min_z <= dz? min_z : dz;
-
-  //         max_x = max_x >= dx? max_x : dx;
-  //         max_y = max_y >= dy? max_y : dy;
-  //         max_z = max_z >= dz? max_z : dz;
-
-  //         const px = Math.min(Math.max(Math.round(dx), 0), ww-1);
-  //         const py = Math.min(Math.max(Math.round(dy), 0), hh-1);
-  //         const pz = Math.min(Math.max(Math.round(dz), 0), dd-1);
-          
-  //         scalars[i] = mydata[px + py*ww + pz*ww*hh] / 255.0;
-  //       }
-  //       console.log(min_x, min_y, min_z);
-  //       console.log(max_x, max_y, max_z);
-  //     },
-  //   });
-
-  //   renderWindow.render();
-  // });
-
-
   // Function for updating iso-value
   function updateIsoValue(e) {
     const isoValue = Number(e.target.value);
@@ -55589,7 +55525,7 @@ exports.default = { newInstance: newInstance, extend: extend };
 /* 255 */
 /***/ (function(module, exports) {
 
-module.exports = "<table>\n  <tr>\n    <td>Iso value</td>\n    <td>\n      <input class='isoValue' type=\"range\" min=\"0.0\" max=\"1.0\" step=\"0.05\" value=\"0.0\" />\n    </td>\n  </tr>\n</table>\n";
+module.exports = "<table>\r\n  <tr>\r\n    <td>Iso value</td>\r\n    <td>\r\n      <input class='isoValue' type=\"range\" min=\"0.0\" max=\"1.0\" step=\"0.05\" value=\"0.0\" />\r\n    </td>\r\n  </tr>\r\n</table>\r\n";
 
 /***/ }),
 /* 256 */

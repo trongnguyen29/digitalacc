@@ -41,7 +41,7 @@ module.exports = {
 ```
 
 3. And extend `package.json` file with the following set of scripts.
-```json
+```
 {
   [...],
   "scripts": {
