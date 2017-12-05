@@ -147,13 +147,12 @@ export function updateIsoSurface(urlToLoad) {
       renderWindow.render();
     }).catch(function () {
       console.error('Error cannot load isosurface');
+      delete global.distance;
+      delete global.image_dim;
     });
 
     // Save current volume name
     global.isofile = urlToLoad;
-  } else {
-    delete global.distance;
-    delete global.image_dim;
   }
 }
 

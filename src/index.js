@@ -110,6 +110,7 @@ document.getElementById('viewmode').onchange = function () {
     updateVolumeViewer(getFileName("INTENSITY"));
     document.querySelector('#isorenderer').style.display = "none";
     document.querySelector('#volumerenderer').style.display = "inline";
+    global.volscreen.resize();
   } else if (viewmode == "IsoSurface") {
     console.log("Iso Surface");
     updateIsoSurface(getFileName("DISTANCE"));
@@ -117,6 +118,7 @@ document.getElementById('viewmode').onchange = function () {
     loadLabel(getFileName("LABEL"));
     document.querySelector('#volumerenderer').style.display = "none";
     document.querySelector('#isorenderer').style.display = "inline";
+    global.isoscreen.resize();
   } else {
     console.error("Unknown View Mode");
   }

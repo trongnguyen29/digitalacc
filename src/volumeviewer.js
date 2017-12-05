@@ -73,8 +73,10 @@ export function viewVolumeRender(urlToLoad, div_id) {
   });
 
   fullScreenRenderer.setResizeCallback(({ width, height }) => {
-    widget.setSize(Math.min(450, width - 10), 150);
-    widget.render();
+    if (width - 10 >= 0) {
+      widget.setSize(Math.min(450, width - 10), 150);
+      widget.render();
+    }
   });
   
   const piecewiseFunction = vtkPiecewiseFunction.newInstance();
