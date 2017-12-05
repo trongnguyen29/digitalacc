@@ -14,7 +14,7 @@ import vtkColorMaps from 'vtk.js/Sources/Rendering/Core/ColorTransferFunction/Co
 // Initialize volume viewer
 // ----------------------------------------------------------------------------
 export function viewVolumeRender(urlToLoad, div_id) {
-  console.log("VolumeRend : " + urlToLoad);
+  console.log("Init Volume Rendering");
   // Create DIV for volume viewer
   var wrappercontainer = document.querySelector('#vtkjs');
   const vtkcontainer = document.createElement('div');
@@ -65,50 +65,24 @@ export function viewVolumeRender(urlToLoad, div_id) {
     iconSize: 20, // Can be 0 if you want to remove buttons (dblClick for (+) / rightClick for (-))
     padding: 10,
   });
+  
+  widget.setColorTransferFunction(lookupTable);
+  lookupTable.onModified(() => {
+    widget.render();
+    renderWindow.render();
+  });
+
   fullScreenRenderer.setResizeCallback(({ width, height }) => {
     widget.setSize(Math.min(450, width - 10), 150);
     widget.render();
   });
-
+  
   const piecewiseFunction = vtkPiecewiseFunction.newInstance();
+
+  // create actor
   const actor = vtkVolume.newInstance();
   const mapper = vtkVolumeMapper.newInstance({ sampleDistance: 1.0 });
-
-  // Load data with real-time loading progress
-  const progressContainer = document.createElement('div');
-
-  const progressCallback = (progressEvent) => {
-    const percent = Math.floor(100 * progressEvent.loaded / progressEvent.total);
-    progressContainer.innerHTML = `Loading ${percent}%`;
-  };
-
-  const volumeReader = vtkXMLImageDataReader.newInstance();
-  HttpDataAccessHelper.fetchText({}, urlToLoad, { progressCallback }).then((txt) => {
-    volumeReader.parse(txt);
-    const source = volumeReader.getOutputData(0);
-
-    // Read data
-    const imageData = volumeReader.getOutputData(0);
-    const dataArray = source.getPointData().getScalars() || source.getPointData().getArrays()[0];
-    const dataRange = dataArray.getRange();
-
-    globalDataRange[0] = dataRange[0];
-    globalDataRange[1] = dataRange[1];
-
-    widget.setDataArray(dataArray.getData());
-    widget.applyOpacity(piecewiseFunction);
-    widget.setColorTransferFunction(lookupTable);
-    lookupTable.onModified(() => {
-      widget.render();
-      renderWindow.render();
-    });
-
-    // Add volume rendering to renderer
-    renderer.addVolume(actor);
-    renderer.getActiveCamera().set({ position: [0, 0, -1], viewUp: [0, -1, 0] });
-    renderer.resetCamera();
-    renderWindow.render();
-  });
+  const volumeReader = vtkXMLImageDataReader.newInstance(); 
 
   // Configure VTK pipeline
   actor.setMapper(mapper);
@@ -116,6 +90,9 @@ export function viewVolumeRender(urlToLoad, div_id) {
   actor.getProperty().setRGBTransferFunction(0, lookupTable);
   actor.getProperty().setScalarOpacity(0, piecewiseFunction);
   actor.getProperty().setInterpolationTypeToLinear();
+
+  renderer.addVolume(actor);
+  renderer.getActiveCamera().set({ position: [0, 0, -1], viewUp: [0, -1, 0] });
 
   // Default setting Piecewise function widget
   widget.addGaussian(0.525, 0.5, 0.2, 0.3, 0.2);
@@ -137,21 +114,23 @@ export function viewVolumeRender(urlToLoad, div_id) {
   });
 
   // Expose variable to global namespace
-  global.fullScreen = fullScreenRenderer;
+  global.volscreen = fullScreenRenderer;
   global.widget = widget;
+  global.piecewiseFunction = piecewiseFunction;
   global.volumeReader = volumeReader;
   global.globalDataRange = globalDataRange;
-  global.volfile = urlToLoad;
+  
+  updateVolumeViewer(urlToLoad);
 }
-
 
 // ----------------------------------------------------------------------------
 // Update volume viewer: change volume
 // ----------------------------------------------------------------------------
 export function updateVolumeViewer(urlToLoad) {
   if (urlToLoad != global.volfile) {
-    console.log("New VolumeRend : " + urlToLoad);
-    const renderWindow = global.fullScreen.getRenderWindow();
+    console.log("VolumeRend : " + urlToLoad);
+    const renderer = global.volscreen.getRenderer();
+    const renderWindow = global.volscreen.getRenderWindow();
     // Load data with real-time loading progress
     const progressContainer = document.createElement('div');
 
@@ -173,10 +152,14 @@ export function updateVolumeViewer(urlToLoad) {
       global.globalDataRange[1] = dataRange[1];
       // Update Lookup table
       global.widget.setDataArray(dataArray.getData());
-
+      global.widget.applyOpacity(global.piecewiseFunction);
+      
       // Update renderer
       global.widget.render();
+      renderer.resetCamera();
       renderWindow.render();
+    }).catch(function () {
+      console.error('Error cannot load volume intensity');
     });
 
     global.volfile = urlToLoad;

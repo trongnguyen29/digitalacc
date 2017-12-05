@@ -1,6 +1,6 @@
 import { viewVolumeRender, updateVolumeViewer } from 'volumeviewer';
 import { viewIsoSurface, updateIsoSurface, updateProteinPair, loadLabel } from 'isoviewer';
-import { getProteinPair } from 'proteinnetwork';
+import { getProteinPair, updateNetworkColor } from 'proteinnetwork';
 import 'template';
 require(['volumeviewer', 'isoviewer', 'proteinnetwork']);
 
@@ -66,16 +66,17 @@ volumelist.onreadystatechange = function () {
       // Initialize left panel (isosurface and volume rendering)
       viewVolumeRender(getFileName("INTENSITY"), 'volumerenderer');
       viewIsoSurface(getFileName("DISTANCE"), 'isorenderer');
-      updateProteinPair(getFileName(null, ['Cdc42', 'WASp']));
+      // updateProteinPair(getFileName(null, ['Cdc42', 'WASp']));
       loadLabel(getFileName("LABEL"));
       
-
       // Show isosurface first
       document.querySelector('#volumerenderer').style.display = "none";
     }
   }
 }
 volumelist.send(null);
+
+updateNetworkColor();
 
 // ----------------------------------------------------------------------------
 // Add event listener
@@ -142,7 +143,6 @@ document.getElementById("volumetime").onchange = function () {
 window.network.on("click", function (params) {
   var pair = getProteinPair();
   if (!(pair === undefined)) {
-    console.log(getFileName(null, pair));
     updateProteinPair(getFileName(null, pair));
   }
 });

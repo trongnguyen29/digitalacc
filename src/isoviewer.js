@@ -17,8 +17,6 @@ import { AttributeTypes } from 'vtk.js/Sources/Common/DataModel/DataSetAttribute
 import { FieldDataTypes } from 'vtk.js/Sources/Common/DataModel/DataSet/Constants';
 
 import vtkPickerInteractorStyle from 'myPickerInteractorStyle';
-import { urlExists } from 'myutil';
-require('myutil');
 
 import controlPanel from './controller.html';
 
@@ -28,7 +26,7 @@ global.spacing = new Array([0.2, 0.2, 1]);
 // Initialize isosurface viewer
 // ----------------------------------------------------------------------------
 export function viewIsoSurface(urlToLoad, div_id) {
-  console.log("IsoSurface : " + urlToLoad);
+  console.log("Init IsoSurface");
   // Create DIV for isosurface viewer
   var wrappercontainer = document.querySelector('#vtkjs');
   const vtkcontainer = document.createElement('div');
@@ -63,7 +61,7 @@ export function viewIsoSurface(urlToLoad, div_id) {
   marchingCube.setComputeNormals(true);
   // Set isosurface color
   const filter = vtkCalculator.newInstance();
-  
+
   // Add picker
   // Press shift+click to pick
   const picker = vtkCellPicker.newInstance();
@@ -76,52 +74,16 @@ export function viewIsoSurface(urlToLoad, div_id) {
   iStyle.setContainer(fullScreenRenderWindow.getContainer());
   renderWindow.getInteractor().setInteractorStyle(iStyle);
   renderWindow.getInteractor().setPicker(picker);
-  
 
-  // Load data with real-time loading progress
-  const progressContainer = document.createElement('div');
+  filter.setInputConnection(marchingCube.getOutputPort());
+  mapper.setInputConnection(filter.getOutputPort());
+  actor.setMapper(mapper);
 
-  const progressCallback = (progressEvent) => {
-    const percent = Math.floor(100 * progressEvent.loaded / progressEvent.total);
-    progressContainer.innerHTML = `Loading ${percent}%`;
-  };
+  document.querySelector('.isoValue').addEventListener('input', updateIsoValue);
 
-  const vtiReader = vtkXMLImageDataReader.newInstance();
-  HttpDataAccessHelper.fetchText({}, urlToLoad, { progressCallback }).then((txt) => {
-    vtiReader.parse(txt);
-
-    // Configure VTK pipeline
-    const source = vtiReader.getOutputData(0);
-    
-    global.spacing = source.getSpacing();
-
-    marchingCube.setInputData(source);
-
-    filter.setInputConnection(marchingCube.getOutputPort());
-    mapper.setInputConnection(filter.getOutputPort());
-
-    // mapper.setInputConnection(marchingCube.getOutputPort());
-    actor.setMapper(mapper);
-
-    // Read data volume
-    const dataArray = source.getPointData().getScalars() || source.getPointData().getArrays()[0];
-    const dataRange = dataArray.getRange();
-    const firstIsoValue = (dataRange[0] + dataRange[1]) / 3;
-
-    // Setup iso-value slider
-    const el = document.querySelector('.isoValue');
-    el.setAttribute('min', dataRange[0]);
-    el.setAttribute('max', dataRange[1]);
-    el.setAttribute('value', firstIsoValue);
-    el.addEventListener('input', updateIsoValue);
-    marchingCube.setContourValue(firstIsoValue);
-
-    // Add isosurface to renderer
-    renderer.addActor(actor);
-    renderer.getActiveCamera().set({ position: [0, 0, -1], viewUp: [0, -1, 0] });
-    renderer.resetCamera();
-    renderWindow.render();
-  });
+  // Add isosurface to renderer
+  renderer.addActor(actor);
+  renderer.getActiveCamera().set({ position: [0, 0, -1], viewUp: [0, -1, 0] });
 
   // Function for updating iso-value
   function updateIsoValue(e) {
@@ -133,23 +95,10 @@ export function viewIsoSurface(urlToLoad, div_id) {
   // Global variables
   global.isoscreen = fullScreenRenderWindow;
   global.marchingCube = marchingCube;
-  global.isofile = urlToLoad;
   global.filter = filter;
 
-  resetProteinPair();
-
-  // console.log(renderWindow);
-  // fullScreenRenderWindow.setResizeCallback(function () {
-  //   console.log("D");
-  //   const renderWindow = global.isoscreen.getRenderWindow();
-  //   global.isoscreen.getRenderer().resetCamera();
-  //   renderWindow.render();
-  // });
-  // renderWindow.addObserver();
-  // window.addEventListener('resize', function() {
-  //   const renderWindow = global.isoscreen.getRenderWindow();
-  //   renderWindow.render();
-  // }, false);
+  updateIsoSurface(urlToLoad);
+  resertProteinPair();
 }
 
 // ----------------------------------------------------------------------------
@@ -158,9 +107,10 @@ export function viewIsoSurface(urlToLoad, div_id) {
 export function updateIsoSurface(urlToLoad) {
   // Update only when volume changes
   if (urlToLoad != global.isofile) {
-    console.log("New IsoSurface : " + urlToLoad);
+    console.log("IsoSurface : " + urlToLoad);
 
     // Create new DIV for showing real-time loading progress
+    const renderer = global.isoscreen.getRenderer();
     const renderWindow = global.isoscreen.getRenderWindow();
     const progressContainer = document.createElement('div');
 
@@ -175,12 +125,15 @@ export function updateIsoSurface(urlToLoad) {
 
       // Update VTK input pipeline
       const source = vtiReader.getOutputData(0);
+      global.image_dim = source.getDimensions();
       global.marchingCube.setInputData(source);
+      global.spacing = source.getSpacing();
 
       // Read data volume
       const dataArray = source.getPointData().getScalars() || source.getPointData().getArrays()[0];
       const dataRange = dataArray.getRange();
       const firstIsoValue = (dataRange[0] + dataRange[1]) / 3;
+      global.distance = dataArray.getData();
 
       // Update iso-value slider
       const el = document.querySelector('.isoValue');
@@ -190,11 +143,17 @@ export function updateIsoSurface(urlToLoad) {
       global.marchingCube.setContourValue(firstIsoValue);
 
       // Update renderer
+      renderer.resetCamera();
       renderWindow.render();
+    }).catch(function () {
+      console.error('Error cannot load isosurface');
     });
 
     // Save current volume name
     global.isofile = urlToLoad;
+  } else {
+    delete global.distance;
+    delete global.image_dim;
   }
 }
 
@@ -202,7 +161,8 @@ export function updateIsoSurface(urlToLoad) {
 // Update isosurface protein: change isosurface color
 // ----------------------------------------------------------------------------
 export function updateProteinPair(ppiToLoad) {
-  if (urlExists(ppiToLoad)) {
+  if (ppiToLoad != global.ppifile) {
+
     console.log("ProteinPair : " + ppiToLoad);
     // Load protein interaction
     const renderWindow = global.isoscreen.getRenderWindow();
@@ -269,14 +229,18 @@ export function updateProteinPair(ppiToLoad) {
       });
 
       renderWindow.render();
+    }).catch(function () {
+      console.error('Error cannot load protein pair');
+      resertProteinPair();
+      renderWindow.render();
     });
-  } else {
-    resetProteinPair();
+
+    global.ppifile = ppiToLoad;
   }
 }
 
-
-function resetProteinPair() {
+function resertProteinPair() {
+  // reset to white color
   global.filter.setFormula({
     getArrays: inputDataSets => ({
       input: [],
@@ -298,30 +262,29 @@ function resetProteinPair() {
 // Load label
 // ----------------------------------------------------------------------------
 export function loadLabel(labelToLoad) {
-  if (urlExists(labelToLoad)) {
-    console.log("Label : " + labelToLoad);
-    // Load label
-    const progressContainer = document.createElement('div');
+  console.log("Label : " + labelToLoad);
+  // Load label
+  const progressContainer = document.createElement('div');
 
-    const progressCallback = (progressEvent) => {
-      const percent = Math.floor(100 * progressEvent.loaded / progressEvent.total);
-      progressContainer.innerHTML = `Loading ${percent}%`;
-    };
+  const progressCallback = (progressEvent) => {
+    const percent = Math.floor(100 * progressEvent.loaded / progressEvent.total);
+    progressContainer.innerHTML = `Loading ${percent}%`;
+  };
 
-    const vtiReader = vtkXMLImageDataReader.newInstance();
+  const vtiReader = vtkXMLImageDataReader.newInstance();
 
-    HttpDataAccessHelper.fetchText({}, labelToLoad, { progressCallback }).then((txt) => {
-      vtiReader.parse(txt);
+  HttpDataAccessHelper.fetchText({}, labelToLoad, { progressCallback }).then((txt) => {
+    vtiReader.parse(txt);
 
-      const source = vtiReader.getOutputData(0);
-      global.label_dim = source.getDimensions();
-      const dataArray = source.getPointData().getScalars() || source.getPointData().getArrays()[0];
-      global.label  = dataArray.getData();
-      // console.log(global.label_dim);
-      // console.log(global.label);
-    });
-  } else {
+    const source = vtiReader.getOutputData(0);
+    global.label_dim = source.getDimensions();
+    const dataArray = source.getPointData().getScalars() || source.getPointData().getArrays()[0];
+    global.label = dataArray.getData();
+    // console.log(global.label_dim);
+    // console.log(global.label);
+  }).catch(function () {
+    console.error('Error cannot load label');
     delete global.label;
     delete global.label_dim;
-  }
+  });
 }

@@ -33,6 +33,7 @@ body {
 #bottom {
   min-height: 80px;
   height: 50%;
+  background-color: #ffffff;
 }
 
 #footer {
@@ -46,12 +47,6 @@ body {
   float: left;
   width: 25%;
   height: 40px;
-}
-
-/* protein network */
-#mynetwork {
-  width: 600px;
-  height: 400px;
 }
 
 /* interface */

@@ -1,6 +1,6 @@
 import macro from 'vtk.js/Sources/macro';
 import vtkInteractorStyleTrackballCamera from 'vtk.js/Sources/Interaction/Style/InteractorStyleTrackballCamera';
-import vtkSphereSource from 'vtk.js/Sources/Filters/Sources/SphereSource';
+import vtkConeSource from 'vtk.js/Sources/Filters/Sources/ConeSource';
 import vtkActor from 'vtk.js/Sources/Rendering/Core/Actor';
 import vtkMapper from 'vtk.js/Sources/Rendering/Core/Mapper';
 import vtkMath from 'vtk.js/Sources/Common/Core/Math';
@@ -21,6 +21,7 @@ function vtkPickerInteractorStyle(publicAPI, model) {
   var firstclick = true;
 
   const actor = vtkActor.newInstance();
+  var curang = [1.0,0.0,0.0];
 
   publicAPI.handleRightButtonPress = () => {
     const pos = model.interactor.getEventPosition(model.interactor.getPointerIndex());
@@ -35,54 +36,86 @@ function vtkPickerInteractorStyle(publicAPI, model) {
     const point = [pos.x - boundingContainer.left, pos.y + boundingContainer.top, 0.0];
     interactor.getPicker().pick(point, renderer);
 
-    const pickedPoints = interactor.getPicker().getPickedPositions();
+    const pickPoint = interactor.getPicker().getPickPosition();
     const pickedCellId = interactor.getPicker().getCellId();
-    // console.log('cell id : ', pickedCellId);
-    // console.log(pickedPoints);
+    
+    // compute normal for cursor
+    if (global.image_dim && global.distance) {
+      const ww = global.image_dim[0];
+      const hh = global.image_dim[1];
+      const dd = global.image_dim[2];
+      const px = Math.min(Math.max(Math.round(pickPoint[0]) / global.spacing[0], 0), ww-1);
+      const py = Math.min(Math.max(Math.round(pickPoint[1]) / global.spacing[1], 0), hh-1);
+      const pz = Math.min(Math.max(Math.round(pickPoint[2]) / global.spacing[2], 0), dd-1);
+
+      var arr = new Array(27).fill(0);
+      for (let ii = 0; ii <= 2; ii++) {
+        if ((px == 0 && ii == 0) || (px == ww-1 && ii == 2))
+          continue;
+        for (let jj = 0; jj <= 2; jj++) {
+          if ((py == 0 && jj == 0) || (py == hh-1 && jj == 2))
+            continue;
+          for (let kk = 0; kk <= 2; kk++) {
+            if ((pz == 0 && kk == 0) || (pz == kk-1 && kk == 2))
+              continue;
+            arr[ii + jj*3 + kk*9] = global.distance[px+ii-1 + ww*(py+jj-1) + ww*hh*(pz+kk-1)];
+          }
+        }
+      }
+
+      var mynormal = new Float32Array(3);
+      mynormal[0] = arr[0 + 1*3 + 1*9] - arr[2 + 1*3 + 1*9];
+      mynormal[1] = arr[1 + 0*3 + 1*9] - arr[1 + 2*3 + 1*9];
+      mynormal[2] = arr[1 + 1*3 + 0*9] - arr[1 + 1*3 + 2*9];
+      vtkMath.normalize(mynormal);
+      var halfnormal = new Float32Array(3);
+      halfnormal[0] = mynormal[0] + 1.0;
+      halfnormal[1] = mynormal[1];
+      halfnormal[2] = mynormal[2];
+      vtkMath.normalize(halfnormal);
+    }
 
     if (!(global.label_dim === undefined) && !(global.label === undefined)) {
       const ww = global.label_dim[0];
       const hh = global.label_dim[1];
       const dd = global.label_dim[2];
-      const px = Math.min(Math.max(Math.round(pickedPoints[0][0]), 0), ww-1) / global.spacing[0];
-      const py = Math.min(Math.max(Math.round(pickedPoints[0][1]), 0), hh-1) / global.spacing[1];
-      const pz = Math.min(Math.max(Math.round(pickedPoints[0][2]), 0), dd-1) / global.spacing[2];
-      
+      const px = Math.min(Math.max(Math.round(pickPoint[0]), 0), ww - 1) / global.spacing[0];
+      const py = Math.min(Math.max(Math.round(pickPoint[1]), 0), hh - 1) / global.spacing[1];
+      const pz = Math.min(Math.max(Math.round(pickPoint[2]), 0), dd - 1) / global.spacing[2];
+
       // console.log(px, py, pz);
       // console.log(ww, hh, dd);
       // console.log(global.label[px + ww*py + ww*hh*pz]);
-      const part_i = global.label[px + ww*py + ww*hh*pz];
+      const part_i = global.label[px + ww * py + ww * hh * pz];
       selectCompartment(part_i);
-  }
+    }
 
+    pickPoint[0] -= mynormal[0]*0.5;
+    pickPoint[1] -= mynormal[1]*0.5;
+    pickPoint[2] -= mynormal[2]*0.5;
 
     const cameraCenter = model.currentRenderer.getActiveCamera().getPosition();
-    let minDistance = Number.MAX_VALUE;
-    for (let i = 0; i < pickedPoints.length; i++) {
-      const dist = Math.sqrt(vtkMath.distance2BetweenPoints(cameraCenter, pickedPoints[i]));
-      if (dist < minDistance) {
-        minDistance = dist;
-      }
-      if (firstclick) {
-        const sphere = vtkSphereSource.newInstance();
-        const mapper = vtkMapper.newInstance();
 
-        // sphere.setCenter(pickedPoints[i]);
-        sphere.setRadius(1);
+    if (firstclick) {
+      const cone = vtkConeSource.newInstance({ resolution: 20 });
+      const mapper = vtkMapper.newInstance();
 
-        mapper.setInputData(sphere.getOutputData());
-        actor.setMapper(mapper);
-        actor.getProperty().setColor(1.0, 0.0, 0.0);
-        actor.setPosition(pickedPoints[i]);
-        model.currentRenderer.addActor(actor);
-        firstclick = false;
-        // console.log(actor);
-      } else {
-        actor.setPosition(pickedPoints[i]);
-      }
+      mapper.setInputData(cone.getOutputData());
+      actor.setMapper(mapper);
+      actor.getProperty().setColor(1.0, 0.0, 0.0);
+      actor.setPosition(pickPoint);
+      model.currentRenderer.addActor(actor);
+      firstclick = false;
+
+      actor.rotateWXYZ(180, halfnormal[0], halfnormal[1], halfnormal[2]);
+    } else {
+      actor.rotateWXYZ(-180, curang[0], curang[1], curang[2]);
+      actor.setPosition(pickPoint);
+      actor.rotateWXYZ(180, halfnormal[0], halfnormal[1], halfnormal[2]);
     }
+    console.log(mynormal);
+    curang = halfnormal;
     model.interactor.render();
-
   };
 }
 
