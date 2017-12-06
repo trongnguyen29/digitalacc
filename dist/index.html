@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Digital aCC</title>
   <link rel="stylesheet" type="text/css" href="css/ourstyle.css" />
+  <link rel="stylesheet" type="text/css" href="css/tutorial.css" />
   <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis-network.min.css" />
 </head>
 
@@ -14,21 +15,25 @@
   <script src="js/OrbitControls.js"></script>
   <script src="js/OBJLoader.js"></script>
   <div id="main-wrap">
+    <!-- Viewer -->
     <div id="left">
       <div id="vtkjs"></div>
     </div>
     <div id="right">
+      <!-- Template -->
       <div id="top">
         <div id="mytemplate" style="height:100%;width:100%"></div>
       </div>
+      <!-- Protein Network -->
       <div id="bottom">
         <div id="mynetwork" onresize="ppifit()" style="height:100%;width:100%"></div>
       </div>
     </div>
   </div>
+  <!-- Menu -->
   <div id="footer">
     <div id="content">
-      Viewer
+      View Mode
       <br>
       <select id="viewmode">
         <option value="IsoSurface">IsoSurface</option>
@@ -36,21 +41,57 @@
       </select>
     </div>
     <div id="content">
-      Image
+      Neuron
       <br>
       <select id="selectedvolume">
       </select>
     </div>
     <div id="content">
-      Time: <output id="volumetimeId"></output>/<output id="volumetimeMaxId"></output>
+      Time:
+      <output id="volumetimeId"></output>/
+      <output id="volumetimeMaxId"></output>
       <br>
       <input type="range" min="1" max="1" step="1" value="1" class="slider" id="volumetime">
     </div>
     <div id="content">
-      Version 1.0.0
-      <br> Last update: Dec 4, 2017
+      <table>
+        <tr>
+          <td width="200px">Version 1.0.0</td>
+          <td rowspan="2">
+            <button href="#" id="helpbtn">?</button>
+          </td>
+        </tr>
+        <tr>
+          <td>Last update: Dec 4, 2017</td>
+        </tr>
     </div>
   </div>
+
+  <!-- Tutorial: The Modal -->
+  <div id="model-tut" class="modal">
+    <!-- Modal content -->
+    <div class="modal-content">
+      <div class="modal-header">
+        <span class="close">&times;</span>
+        <output id="modal-title"></output>
+      </div>
+      <div class="modal-body">
+        <a class="prev">&#10094;</a>
+        <output id="modal-desc"></output>
+        <a class="next">&#10095;</a>
+      </div>
+      <div class="modal-footer">
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+      </div>
+    </div>
+  </div>
+  <!-- Highlight box -->
+  <div id="tutbox" style="display:none"></div>
+
   <script type="text/javascript" src="digitalacc.js"></script>
 </body>
 

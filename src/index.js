@@ -2,7 +2,8 @@ import { viewVolumeRender, updateVolumeViewer } from 'volumeviewer';
 import { viewIsoSurface, updateIsoSurface, updateProteinPair, loadLabel } from 'isoviewer';
 import { getProteinPair, updateNetworkColor } from 'proteinnetwork';
 import 'template';
-require(['volumeviewer', 'isoviewer', 'proteinnetwork']);
+import 'tutorial';
+require(['volumeviewer', 'isoviewer', 'proteinnetwork', 'template', 'tutorial']);
 
 // ----------------------------------------------------------------------------
 // Function for getting filename
