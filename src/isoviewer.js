@@ -108,10 +108,11 @@ export function updateIsoSurface(urlToLoad) {
   // Update only when volume changes
   if (urlToLoad != global.isofile) {
     console.log("IsoSurface : " + urlToLoad);
-
-    // Create new DIV for showing real-time loading progress
+    document.getElementById('spinner').style.display = 'block';
+    
     const renderer = global.isoscreen.getRenderer();
     const renderWindow = global.isoscreen.getRenderWindow();
+    // Create new DIV for showing real-time loading progress
     const progressContainer = document.createElement('div');
 
     const progressCallback = (progressEvent) => {
@@ -145,10 +146,12 @@ export function updateIsoSurface(urlToLoad) {
       // Update renderer
       renderer.resetCamera();
       renderWindow.render();
+      document.getElementById('spinner').style.display = 'none';
     }).catch(function () {
       console.error('Error cannot load isosurface');
       delete global.distance;
       delete global.image_dim;
+      document.getElementById('spinner').style.display = 'none';
     });
 
     // Save current volume name
@@ -161,8 +164,9 @@ export function updateIsoSurface(urlToLoad) {
 // ----------------------------------------------------------------------------
 export function updateProteinPair(ppiToLoad) {
   if (ppiToLoad != global.ppifile) {
-
     console.log("ProteinPair : " + ppiToLoad);
+    document.getElementById('spinner').style.display = 'block';
+    
     // Load protein interaction
     const renderWindow = global.isoscreen.getRenderWindow();
     const progressContainer = document.createElement('div');
@@ -228,10 +232,12 @@ export function updateProteinPair(ppiToLoad) {
       });
 
       renderWindow.render();
+      document.getElementById('spinner').style.display = 'none';
     }).catch(function () {
       console.error('Error cannot load protein pair');
       resertProteinPair();
       renderWindow.render();
+      document.getElementById('spinner').style.display = 'none';
     });
 
     global.ppifile = ppiToLoad;
@@ -262,6 +268,8 @@ function resertProteinPair() {
 // ----------------------------------------------------------------------------
 export function loadLabel(labelToLoad) {
   console.log("Label : " + labelToLoad);
+  document.getElementById('spinner').style.display = 'block';
+  
   // Load label
   const progressContainer = document.createElement('div');
 
@@ -281,9 +289,11 @@ export function loadLabel(labelToLoad) {
     global.label = dataArray.getData();
     // console.log(global.label_dim);
     // console.log(global.label);
+    document.getElementById('spinner').style.display = 'none';
   }).catch(function () {
     console.error('Error cannot load label');
     delete global.label;
     delete global.label_dim;
+    document.getElementById('spinner').style.display = 'none';
   });
 }

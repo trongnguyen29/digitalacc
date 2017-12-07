@@ -14,25 +14,25 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/88/three.min.js"></script>
   <script src="js/OrbitControls.js"></script>
   <script src="js/OBJLoader.js"></script>
-  <div id="main-wrap">
+  <div class="main-wrapper">
     <!-- Viewer -->
-    <div id="left">
+    <div class="column">
       <div id="vtkjs"></div>
     </div>
-    <div id="right">
+    <div class="column">
       <!-- Template -->
-      <div id="top">
-        <div id="mytemplate" style="height:100%;width:100%"></div>
+      <div class="row">
+        <div id="mytemplate" style="height:100%"></div>
       </div>
       <!-- Protein Network -->
-      <div id="bottom">
-        <div id="mynetwork" onresize="ppifit()" style="height:100%;width:100%"></div>
+      <div class="row">
+        <div id="mynetwork" onresize="ppifit()" style="height:100%;background-color: #ffffff;"></div>
       </div>
     </div>
   </div>
   <!-- Menu -->
-  <div id="footer">
-    <div id="content">
+  <div class="footer">
+    <div class="content">
       View Mode
       <br>
       <select id="viewmode">
@@ -40,20 +40,20 @@
         <option value="VolumeRender">VolumeRender</option>
       </select>
     </div>
-    <div id="content">
+    <div class="content">
       Neuron
       <br>
       <select id="selectedvolume">
       </select>
     </div>
-    <div id="content">
+    <div class="content">
       Time:
       <output id="volumetimeId"></output>/
       <output id="volumetimeMaxId"></output>
       <br>
       <input type="range" min="1" max="1" step="1" value="1" class="slider" id="volumetime">
     </div>
-    <div id="content">
+    <div class="content">
       <table>
         <tr>
           <td width="200px">Version 1.0.0</td>
@@ -91,6 +91,8 @@
   </div>
   <!-- Highlight box -->
   <div id="tutbox" style="display:none"></div>
+  <!-- loader -->
+  <div id="spinner" class="loader"></div>
 
   <script type="text/javascript" src="digitalacc.js"></script>
 </body>

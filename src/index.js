@@ -145,7 +145,8 @@ document.getElementById("volumetime").onchange = function () {
 // Network
 window.network.on("click", function (params) {
   var pair = getProteinPair();
-  if (!(pair === undefined)) {
+  var viewmode = document.getElementById("viewmode").value;
+  if (!(pair === undefined) && viewmode == "IsoSurface") {
     updateProteinPair(getFileName(null, pair));
   }
 });

@@ -131,6 +131,8 @@ export function viewVolumeRender(urlToLoad, div_id) {
 export function updateVolumeViewer(urlToLoad) {
   if (urlToLoad != global.volfile) {
     console.log("VolumeRend : " + urlToLoad);
+    document.getElementById('spinner').style.display = 'block';
+    
     const renderer = global.volscreen.getRenderer();
     const renderWindow = global.volscreen.getRenderWindow();
     // Load data with real-time loading progress
@@ -160,8 +162,10 @@ export function updateVolumeViewer(urlToLoad) {
       global.widget.render();
       renderer.resetCamera();
       renderWindow.render();
+      document.getElementById('spinner').style.display = 'none';
     }).catch(function () {
       console.error('Error cannot load volume intensity');
+      document.getElementById('spinner').style.display = 'none';
     });
 
     global.volfile = urlToLoad;
