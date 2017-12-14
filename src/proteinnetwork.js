@@ -16,8 +16,11 @@ var nodes = new vis.DataSet([
 // create an array with edges
 var edges = new vis.DataSet([
   { from: 1, to: 2, label: '0.38', val: 1, color: { color: 'rgb(20,24,200)' } },
+  { from: 2, to: 1, label: '0.38', val: 1, color: { color: 'rgb(20,24,200)' } },
   { from: 1, to: 3, label: '0.03', val: 0.10001, color: { color: 'rgba(30,30,30,0.2)' } },
-  { from: 1, to: 4, label: '0.00', val: 0.00, color: { color: 'rgba(30,30,30,0.2)' } }
+  { from: 3, to: 1, label: '0.38', val: 1, color: { color: 'rgb(20,24,200)' } },
+  { from: 1, to: 4, label: '0.00', val: 0.00, color: { color: 'rgba(30,30,30,0.2)' } },
+  { from: 4, to: 1, label: '0.38', val: 1, color: { color: 'rgb(20,24,200)' } }
 ]);
 
 // create a network
@@ -45,14 +48,18 @@ var options = {
     }
   },
   edges: {
-    width: 10,
+    arrows: {
+      to: { enabled: true, scaleFactor: 1, type: 'arrow' }
+    },
+    width: 2,
+    length: 150,
     color: {
       //   color:'#fdb2fc',
       highlight: '#444444'
     },
     font: {
-      size: 20, // px
-      strokeWidth: 4
+      size: 16, // px
+      strokeWidth: 2
     }
   }
 };

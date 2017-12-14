@@ -39,6 +39,21 @@ export function viewVolumeRender(urlToLoad, div_id) {
   widgetContainer.style.background = 'rgba(255, 255, 255, 0.3)';
   vtkcontainer.appendChild(widgetContainer);
 
+  const widgetXlabel = document.createElement('div');
+  widgetXlabel.innerHTML = "Voxel value";
+  widgetXlabel.style.position = "fixed";
+  widgetXlabel.style.top = 'calc(1em + 149px)';
+  widgetXlabel.style.color = "white";
+  widgetContainer.appendChild(widgetXlabel);
+
+  const widgetYlabel = document.createElement('div');
+  widgetYlabel.innerHTML = "Opacity";
+  widgetYlabel.style.position = "fixed";
+  widgetYlabel.style.transform = "rotate(90deg)";
+  widgetYlabel.style.top = '90px';
+  widgetYlabel.style.color = "white";
+  widgetContainer.appendChild(widgetYlabel);
+
   // Code for changing preset
   const globalDataRange = [0, 255];
   const lookupTable = vtkColorTransferFunction.newInstance();
@@ -62,8 +77,8 @@ export function viewVolumeRender(urlToLoad, div_id) {
     activeStrokeWidth: 3,
     buttonStrokeWidth: 1.5,
     handleWidth: 3,
-    iconSize: 20, // Can be 0 if you want to remove buttons (dblClick for (+) / rightClick for (-))
-    padding: 10,
+    iconSize: 25, // Can be 0 if you want to remove buttons (dblClick for (+) / rightClick for (-))
+    padding: 15,
   });
   
   widget.setColorTransferFunction(lookupTable);
@@ -74,8 +89,12 @@ export function viewVolumeRender(urlToLoad, div_id) {
 
   fullScreenRenderer.setResizeCallback(({ width, height }) => {
     if (width - 10 >= 0) {
-      widget.setSize(Math.min(450, width - 10), 150);
+      var widwidth = Math.min(450, width - 10);
+      widget.setSize(widwidth, 150);
+      widgetXlabel.style.left = 'calc(1em + ' + (widwidth/2 - 40) + 'px)';
+      widgetYlabel.style.left = 'calc(1em + ' + Math.min(407, width - 53) + 'px)';
       widget.render();
+      renderWindow.render();
     }
   });
   

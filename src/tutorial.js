@@ -2,38 +2,113 @@ console.log("Init Tutorial");
 
 // Contents of tutorial slides 
 var titles = [
-    "<h2>Welcome to Digital aCC</h2>",
+    "<h2>Quick Tutorial</h2>",
     "<h2>Viewer</h2>",
     "<h2>Template</h2>",
-    "<h2>Protein Network</h2>",
+    "<h2>Network</h2>",
     "<h2>Menu</h2>"];
 
 var descs = [
-    `<p>Digital aCC is an interactive single-neuron imaging platform for proteome-to-phenome 
-        analysis. The nanometer-scale protein interactions and micrometer-scale cellular morphogenesis 
-        are intimately linked with each other. This viewer displays neuron volume morphology/complexity 
-        and protein interactions over time.</p>`,
-    `<p>The left panel is the viewer. It has two modes: isosurface and volume rendering.</p>
-        <p>In isosurface mode, the boundary of the neuron is displayed as a surface. The color encodes 
-        the concentration of protein interaction.
-        <p>In volume rendering mode, the intensity of neuron volume is displayed. The opacity can be adjusted 
-        to view the inside of the neuron volume.`,
-    `<p>The top-right panel is the prototype aCC. It composes of ten compartments. It is used as the 
-        reference for providing an intuitive two-way mapping between protein interactions and an aCC volume</p>`,
-    `<p>The bottom-left panel is the protein network. It shows the pair of proteins that co-express on the neuron.
-        The user can select the edge to see the protein interaction concentration level of the protein pair
-        (must be in isosurface view mode).</p>`,
-    `<p>The menu at the bottom lets you change the neuron, view mode, and timestep. </p>
+    `<p><b>Welcome to Digital aCC</b>. It is an interactive single-neuron imaging platform for 
+        proteome-to-phenome analysis. The nanometer-scale protein interactions and micrometer-scale 
+        cellular morphogenesis are intimately linked with each other. This platform depicts the 
+        neuron volume morphology/complexity with the protein interactions over time.</p>
+        <p>The layout follows the <i>three-pane interface</i> with the menu at the bottom.</p>
+        <p>On the left, it is the <b>Viewer</b> pane. It displays the neuron volume in either 
+        surface or voxel modes. The option of each mode is on the top-left.</p>
+        <p>The <b>Template</b> pane on the top-right shows the compartments of aCC prototype 
+        of different instars.</p>
+        <p>The <b>Network</b> pane on the bottom-right shows the collection of co-expressed 
+        proteins over neurons.</p>`,
+    `<p>The Viewer pane has two modes: surface and voxel.</p>
+        <p>In the surface mode, the boundary of the neuron is displayed as a surface. While, colors encode 
+        the concentration of protein interaction. The <b>Depth</b> parameter adjusts the depth from the surface.
+        <p>The voxel mode displays the inside of neuron volumes using the 
+        <a href="https://en.wikipedia.org/wiki/Volume_rendering" target="_blank">volume rendering technique</a>. 
+        The voxel's opacity can be adjusted using the graph, where Y-axis is the opacity and X-axis is the value
+        of voxels.
+        <center>
+        <table class="tuttab">
+          <tr>
+            <th>Control</th>
+            <th align='left'>Description</th> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/drag.png" alt="left click and drag"></td>
+            <td>Rotate</td> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/shiftdrag.png" alt="shift + left click and drag"></td>
+            <td>Move</td> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/wheel.png" alt="wheel"></td>
+            <td>Zoom in/out</td> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/rightclick.png" alt="right click"></td>
+            <td>Select voxel <br>(only in surface mode)</td> 
+          </tr>
+        </table>
+        </center>
+        `,
+    `<p>The Template pane shows the aCC prototype of the corresponding instar. 
+        The compartment of the selected voxel is highlighted with blue color.</p>
+        <center>
+        <table class="tuttab">
+        <tr>
+            <th>Control</th>
+            <th align='left'>Description</th> 
+        </tr>
+        <tr>
+            <td align="center"><img src="img/drag.png" alt="left click and drag"></td>
+            <td>Rotate</td> 
+        </tr>
+        <tr>
+            <td align="center"><img src="img/wheel.png" alt="wheel"></td>
+            <td>Zoom in/out</td> 
+        </tr>
+        </table>
+        </center>`,
+    `<p>The Network pane displays the protein network. Nodes/vertices are proteins 
+        and edges join pairs of co-localized proteins. The user can select the edge 
+        to see the protein interaction concentration level of corresponding protein 
+        pair (only in surface mode).</p>
+        <center>
+        <table class="tuttab">
+          <tr>
+            <th>Control</th>
+            <th align='left'>Description</th> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/drag.png" alt="left click and drag" valign="middle"> or Arrows</td>
+            <td>Move</td> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/wheel.png" alt="wheel" valign="middle"> or +/-</td>
+            <td>Zoom in/out</td> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/leftclick.png" alt="left click"></td>
+            <td>Select a protein pair</td> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/zoomExtends.png" alt="fit screen"></td>
+            <td>Fit screen to all nodes</td> 
+          </tr>
+        </table>
+        </center>`,
+    `<p>The menu lets you change the Viewer mode (surface/voxel), neuron, and timestep. </p>
         <p>Click ? for help. </p>
-        <p>This page uses VTK.js, Vis.js, Three.js, Node.js, Webpack. It was tested on Chrome and Safari.</p>`];
+        <p>This page uses VTK.js, Vis.js, Three.js, Node.js, Webpack. It was tested on Chrome.</p>`];
 
 // Positions of highlight box
 var hlbox = [
-    ["", "", "", ""]
-    , ["5px", "5px", "calc(100vh - 60px)", "calc(50vw - 15px)"]
-    , ["5px", "50vw", "calc(50vh - 30px)", "calc(50vw - 15px)"]
-    , ["calc(50vh - 20px)", "50vw", "calc(50vh - 40px)", "calc(50vw - 15px)"]
-    , ["calc(100vh - 50px)", "5px", "40px", "calc(100vw - 20px)"]];
+    ["", "", "", ""],
+    ["5px", "5px", "calc(100vh - 60px)", "calc(50vw - 15px)"],
+    ["5px", "50vw", "calc(50vh - 30px)", "calc(50vw - 15px)"],
+    ["calc(50vh - 20px)", "50vw", "calc(50vh - 40px)", "calc(50vw - 15px)"],
+    ["calc(100vh - 50px)", "5px", "40px", "calc(100vw - 20px)"]];
 // Starting slide
 var slideIndex = 0;
 
@@ -73,11 +148,15 @@ document.getElementsByClassName("next")[0].onclick = function (event) {
 }
 
 // When the user clicks on dots, go to the corresponding slide
-var dots = document.getElementsByClassName("dot");
-for (let ii = 0; ii < dots.length; ii++) {
-    dots[ii].onclick = function (event) {
+var tutnav = document.getElementById("tutnav");
+// var dots = document.getElementsByClassName("dot");
+for (let ii = 0; ii < titles.length; ii++) {
+    var dot = document.createElement('span');
+    dot.classList.add('dot');
+    dot.onclick = function (event) {
         showSlides(ii);
     }
+    tutnav.appendChild(dot);
 }
 
 // show the tutorial slide and the corresponding highlight box

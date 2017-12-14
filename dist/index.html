@@ -1,19 +1,18 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
 
 <head>
   <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Digital aCC</title>
+  <!-- CSS file -->
   <link rel="stylesheet" type="text/css" href="css/ourstyle.css" />
   <link rel="stylesheet" type="text/css" href="css/tutorial.css" />
   <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis-network.min.css" />
+  <link type="text/css" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/qtip2/3.0.3/basic/jquery.qtip.css" />
 </head>
 
 <body>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/88/three.min.js"></script>
-  <script src="js/OrbitControls.js"></script>
-  <script src="js/OBJLoader.js"></script>
   <div class="main-wrapper">
     <!-- Viewer -->
     <div class="column">
@@ -33,21 +32,30 @@
   <!-- Menu -->
   <div class="footer">
     <div class="content">
-      View Mode
+      <div class="hasTooltip">View Mode</div>
+      <div class="hidden">
+        Change view mode of the neuron volume
+      </div>
       <br>
       <select id="viewmode">
-        <option value="IsoSurface">IsoSurface</option>
-        <option value="VolumeRender">VolumeRender</option>
+        <option value="IsoSurface">Surface</option>
+        <option value="VolumeRender">Voxel</option>
       </select>
     </div>
     <div class="content">
-      Neuron
+      <div class="hasTooltip">Neuron</div>
+      <div class="hidden">
+        Change neuron image stack sequence
+      </div>
       <br>
       <select id="selectedvolume">
       </select>
     </div>
     <div class="content">
-      Time:
+      <div class="hasTooltip">Time:</div>
+      <div class="hidden">
+        Change timestep
+      </div>
       <output id="volumetimeId"></output>/
       <output id="volumetimeMaxId"></output>
       <br>
@@ -58,11 +66,16 @@
         <tr>
           <td width="200px">Version 1.0.0</td>
           <td rowspan="2">
-            <button href="#" id="helpbtn">?</button>
+            <div class="hasTooltip">
+              <button href="#" id="helpbtn">?</button>
+            </div>
+            <div class="hidden">
+              Help
+            </div>
           </td>
         </tr>
         <tr>
-          <td>Last update: Dec 4, 2017</td>
+          <td>Last update: Dec 14, 2017</td>
         </tr>
     </div>
   </div>
@@ -77,15 +90,10 @@
       </div>
       <div class="modal-body">
         <a class="prev">&#10094;</a>
-        <output id="modal-desc"></output>
         <a class="next">&#10095;</a>
+        <output id="modal-desc"></output>
       </div>
-      <div class="modal-footer">
-        <span class="dot"></span>
-        <span class="dot"></span>
-        <span class="dot"></span>
-        <span class="dot"></span>
-        <span class="dot"></span>
+      <div class="modal-footer" id="tutnav">
       </div>
     </div>
   </div>
@@ -94,6 +102,15 @@
   <!-- loader -->
   <div id="spinner" class="loader"></div>
 
+  <!-- jQuery FIRST i.e. before qTip (and all other scripts too usually) -->
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+  <!-- Include either the minifed or production version, NOT both!! -->
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/qtip2/3.0.3/basic/jquery.qtip.js"></script>
+  <!-- Optional: imagesLoaded script to better support images inside your tooltips -->
+  <!-- <script type="text/javascript" src="/path/to/jquery.imagesloaded.pkg.min.js"></script> -->
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/three.js/88/three.min.js"></script>
+  <script type="text/javascript" src="js/OrbitControls.js"></script>
+  <script type="text/javascript" src="js/OBJLoader.js"></script>
   <script type="text/javascript" src="digitalacc.js"></script>
 </body>
 

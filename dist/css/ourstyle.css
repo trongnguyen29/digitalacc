@@ -3,6 +3,7 @@ html,
 body {
   font-size: 16px;
   height: calc(100% - 27px);
+  overflow: hidden;
 }
 
 .main-wrapper {
@@ -41,6 +42,10 @@ body {
   height: 40px;
 }
 
+.hidden {
+  display: none;
+}
+
 /* interface */
 select {
   font-size: 14px;
@@ -56,6 +61,10 @@ select {
   opacity: 0.7;
   -webkit-transition: .2s;
   transition: opacity .2s;
+}
+
+.slider:hover {
+  opacity: 1; /* Fully shown on mouse-over */
 }
 
 .slider::-webkit-slider-thumb {
@@ -93,4 +102,60 @@ select {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* iso-value slider */
+/*Chrome*/
+@media screen and (-webkit-min-device-pixel-ratio:0) {
+  .isoValue {
+    overflow: hidden;
+    width: 100%;
+    opacity: 0.7;
+    -webkit-appearance: none;
+    background-color: #a0a0a0;
+  }
+
+  .isoValue:hover {
+    opacity: 1; /* Fully shown on mouse-over */
+  }
+  
+  .isoValue::-webkit-slider-thumb {
+    width: 15px;
+    -webkit-appearance: none;
+    height: 15px;
+    border: 50%; 
+    cursor: ew-resize;
+    background: #434343;
+    box-shadow: -80px 0 0 80px #5cb85c;
+  }
+}
+
+/* FireFox */
+.isoValue::-moz-range-progress {
+  background-color: #5cb85c; 
+}
+.isoValue::-moz-range-track {  
+  background-color: #7a7a7a;
+}
+/* IE*/
+.isoValue::-ms-fill-lower {
+  background-color: #5cb85c; 
+}
+.isoValue::-ms-fill-upper {  
+  background-color: #7a7a7a;
+}
+
+/* table (control setting) */
+.tuttab td {
+  padding-right: 30px;
+  vertical-align: 'middle';
+}
+
+/* tooltip */
+.hasTooltip{
+  display:inline;
+}
+
+.mytooltip .qtip-content{
+  font-size: 14px;
 }

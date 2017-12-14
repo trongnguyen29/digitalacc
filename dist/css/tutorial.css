@@ -46,6 +46,8 @@
     padding: 0;
     border: 1px solid #888;
     width: 50%;
+    max-height: calc(100vh - 210px);
+    overflow-y: auto;
     box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2),0 6px 20px 0 rgba(0,0,0,0.19);
     -webkit-animation-name: animatetop;
     -webkit-animation-duration: 0.4s;
@@ -106,7 +108,7 @@
 /* Next & previous buttons */
 .prev, .next {
   cursor: pointer;
-  position: absolute;
+  position: sticky;
   top: 50%;
   width: auto;
   padding: 16px;
@@ -120,7 +122,8 @@
 
 /* Position the "next button" to the right */
 .next {
-  right: 0;
+  float: right;
+  /* right: 0; */
   border-radius: 3px 0 0 3px;
 }
 

@@ -75,6 +75,7 @@ function init() {
     container.appendChild(renderer.domElement);
 
     var controls = new THREE.OrbitControls(camera, container);
+    controls.enablePan = false;
     controls.addEventListener('change', render);
 
     window.addEventListener('resize', onWindowResize, false);

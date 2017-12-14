@@ -15,7 +15,7 @@ function getFileName(type, protein) {
 
   volumetime = volumetime.length >= 3 ? volumetime : new Array(3 - volumetime.length + 1).join('0') + volumetime;
   if (protein === undefined) {
-      // protein was not passed
+    // protein was not passed
     if (type == "INTENSITY") {
       return './data/volume/' + volumename + '/t' + volumetime + '/intensity/' + volumename + '.vti';
     } else if (type == "DISTANCE") {
@@ -69,9 +69,22 @@ volumelist.onreadystatechange = function () {
       viewIsoSurface(getFileName("DISTANCE"), 'isorenderer');
       // updateProteinPair(getFileName(null, ['Cdc42', 'WASp']));
       loadLabel(getFileName("LABEL"));
-      
+
       // Show isosurface first
       document.querySelector('#volumerenderer').style.display = "none";
+
+      // Add tooltip
+      $('.hasTooltip').each(function () { // Notice the .each() loop, discussed below
+        $(this).qtip({
+          content: { text: $(this).next('div') }, // Use the "div" element next to this for the content
+          position: {
+            target: 'mouse', // Use the mouse position as the position origin
+            adjust: { mouse: true }
+          },
+          style: { classes: 'mytooltip' },
+          show: { solo: true }
+        });
+      });
     }
   }
 }
@@ -89,7 +102,7 @@ selectedvolume.onchange = function () {
   volumetime.max = voltimenum[vid];
   volumetime.value = 1;
   document.getElementById('volumetimeId').value = volumetime.value;
-  document.getElementById('volumetimeMaxId').value = volumetime.max; 
+  document.getElementById('volumetimeMaxId').value = volumetime.max;
 
   var viewmode = document.getElementById("viewmode").value;
   if (viewmode == "VolumeRender") {
@@ -150,5 +163,3 @@ window.network.on("click", function (params) {
     updateProteinPair(getFileName(null, pair));
   }
 });
-
-
