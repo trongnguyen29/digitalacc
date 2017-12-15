@@ -40,11 +40,17 @@ export function viewVolumeRender(urlToLoad, div_id) {
   vtkcontainer.appendChild(widgetContainer);
 
   const widgetXlabel = document.createElement('div');
-  widgetXlabel.innerHTML = "Voxel value";
+  widgetXlabel.classList.add("hasTooltip");
+  widgetXlabel.innerHTML = "Intensity";
   widgetXlabel.style.position = "fixed";
   widgetXlabel.style.top = 'calc(1em + 149px)';
   widgetXlabel.style.color = "white";
   widgetContainer.appendChild(widgetXlabel);
+
+  const widgetXlabeltooltip = document.createElement('div');
+  widgetXlabeltooltip.classList.add("hidden");
+  widgetXlabeltooltip.innerHTML = "Change opacity by adjusting the piecewise function of intensity";
+  widgetContainer.appendChild(widgetXlabeltooltip);
 
   const widgetYlabel = document.createElement('div');
   widgetYlabel.innerHTML = "Opacity";

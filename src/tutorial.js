@@ -149,14 +149,14 @@ document.getElementsByClassName("next")[0].onclick = function (event) {
 
 // When the user clicks on dots, go to the corresponding slide
 var tutnav = document.getElementById("tutnav");
-// var dots = document.getElementsByClassName("dot");
+var nextbutton = document.getElementsByClassName("next");
 for (let ii = 0; ii < titles.length; ii++) {
     var dot = document.createElement('span');
     dot.classList.add('dot');
     dot.onclick = function (event) {
         showSlides(ii);
     }
-    tutnav.appendChild(dot);
+    tutnav.insertBefore(dot, nextbutton[0]);
 }
 
 // show the tutorial slide and the corresponding highlight box
