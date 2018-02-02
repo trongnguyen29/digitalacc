@@ -60,7 +60,7 @@
 /******/ 	__webpack_require__.p = "";
 /******/
 /******/ 	// Load entry module and return exports
-/******/ 	return __webpack_require__(__webpack_require__.s = 117);
+/******/ 	return __webpack_require__(__webpack_require__.s = 120);
 /******/ })
 /************************************************************************/
 /******/ ([
@@ -73,10 +73,12 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
+exports.EVENT_ABORT = exports.VOID = undefined;
+
+var _slicedToArray = function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; }();
 
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
 
-exports.getCurrentGlobalMTime = getCurrentGlobalMTime;
 exports.setLoggerFunction = setLoggerFunction;
 exports.vtkLogMacro = vtkLogMacro;
 exports.vtkInfoMacro = vtkInfoMacro;
@@ -84,9 +86,6 @@ exports.vtkDebugMacro = vtkDebugMacro;
 exports.vtkErrorMacro = vtkErrorMacro;
 exports.vtkWarningMacro = vtkWarningMacro;
 exports.capitalize = capitalize;
-exports.safeArrays = safeArrays;
-exports.enumToString = enumToString;
-exports.getStateArrayMapFunc = getStateArrayMapFunc;
 exports.obj = obj;
 exports.get = get;
 exports.set = set;
@@ -101,6 +100,9 @@ exports.chain = chain;
 exports.isVtkObject = isVtkObject;
 exports.traverseInstanceTree = traverseInstanceTree;
 exports.debounce = debounce;
+exports.proxy = proxy;
+exports.proxyPropertyMapping = proxyPropertyMapping;
+exports.proxyPropertyState = proxyPropertyState;
 
 var _vtk = __webpack_require__(14);
 
@@ -108,9 +110,13 @@ var _vtk2 = _interopRequireDefault(_vtk);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
+function _defineProperty(obj, key, value) { if (key in obj) { Object.defineProperty(obj, key, { value: value, enumerable: true, configurable: true, writable: true }); } else { obj[key] = value; } return obj; }
+
 function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } else { return Array.from(arr); } }
 
 var globalMTime = 0;
+
+var VOID = exports.VOID = Symbol('void');
 
 function getCurrentGlobalMTime() {
   return globalMTime;
@@ -122,6 +128,7 @@ function getCurrentGlobalMTime() {
 /* eslint-disable no-prototype-builtins                                      */
 
 var fakeConsole = {};
+
 function noOp() {}
 
 var consoleMethods = ['log', 'debug', 'info', 'warn', 'error', 'time', 'timeEnd', 'group', 'groupEnd'];
@@ -223,7 +230,9 @@ function obj() {
     function unsubscribe() {
       off(index);
     }
-    return Object.freeze({ unsubscribe: unsubscribe });
+    return Object.freeze({
+      unsubscribe: unsubscribe
+    });
   }
 
   publicAPI.isDeleted = function () {
@@ -335,7 +344,9 @@ function obj() {
 
   // Add serialization support
   publicAPI.getState = function () {
-    var jsonArchive = Object.assign({}, model, { vtkClass: publicAPI.getClassName() });
+    var jsonArchive = Object.assign({}, model, {
+      vtkClass: publicAPI.getClassName()
+    });
 
     // Convert every vtkObject to its serializable form
     Object.keys(jsonArchive).forEach(function (keyName) {
@@ -537,7 +548,9 @@ function setArray(publicAPI, model, fieldNames, size) {
       var array = args;
       // allow an array passed as a single arg.
       if (array.length === 1 && Array.isArray(array[0])) {
+        /* eslint-disable prefer-destructuring */
         array = array[0];
+        /* eslint-enable prefer-destructuring */
       }
 
       if (array.length !== size) {
@@ -588,7 +601,7 @@ function setGetArray(publicAPI, model, fieldNames, size) {
 }
 
 // ----------------------------------------------------------------------------
-// vtkAlgorithm: setInputData(), setInputConnection(), getOutput(), getOutputPort()
+// vtkAlgorithm: setInputData(), setInputConnection(), getOutputData(), getOutputPort()
 // ----------------------------------------------------------------------------
 
 function algo(publicAPI, model, numberOfInputs, numberOfOutputs) {
@@ -616,12 +629,22 @@ function algo(publicAPI, model, numberOfInputs, numberOfOutputs) {
     model.inputArrayToProcess = [];
   }
 
+  // Cache the argument for later manipulation
+  model.numberOfInputs = numberOfInputs;
+
   // Methods
   function setInputData(dataset) {
     var port = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
 
     if (model.deleted) {
       vtkErrorMacro('instance deleted - cannot call any method');
+      return;
+    }
+    if (port >= model.numberOfInputs) {
+      var msg = 'algorithm ' + publicAPI.getClassName() + ' only has ';
+      msg += '' + model.numberOfInputs;
+      msg += ' input ports. To add more input ports, use addInputData()';
+      vtkErrorMacro(msg);
       return;
     }
     if (model.inputData[port] !== dataset || model.inputConnection[port]) {
@@ -649,6 +672,13 @@ function algo(publicAPI, model, numberOfInputs, numberOfOutputs) {
       vtkErrorMacro('instance deleted - cannot call any method');
       return;
     }
+    if (port >= model.numberOfInputs) {
+      var msg = 'algorithm ' + publicAPI.getClassName() + ' only has ';
+      msg += '' + model.numberOfInputs;
+      msg += ' input ports. To add more input ports, use addInputConnection()';
+      vtkErrorMacro(msg);
+      return;
+    }
     model.inputData[port] = null;
     model.inputConnection[port] = outputPort;
   }
@@ -659,6 +689,24 @@ function algo(publicAPI, model, numberOfInputs, numberOfOutputs) {
     return model.inputConnection[port];
   }
 
+  function addInputConnection(outputPort) {
+    if (model.deleted) {
+      vtkErrorMacro('instance deleted - cannot call any method');
+      return;
+    }
+    model.numberOfInputs++;
+    setInputConnection(outputPort, model.numberOfInputs - 1);
+  }
+
+  function addInputData(dataset) {
+    if (model.deleted) {
+      vtkErrorMacro('instance deleted - cannot call any method');
+      return;
+    }
+    model.numberOfInputs++;
+    setInputData(dataset, model.numberOfInputs - 1);
+  }
+
   function getOutputData() {
     var port = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 0;
 
@@ -667,7 +715,6 @@ function algo(publicAPI, model, numberOfInputs, numberOfOutputs) {
       return null;
     }
     if (publicAPI.shouldUpdate()) {
-      // console.log('update filter', publicAPI.getClassName());
       publicAPI.update();
     }
     return model.output[port];
@@ -690,14 +737,14 @@ function algo(publicAPI, model, numberOfInputs, numberOfOutputs) {
       }
     }
 
-    count = numberOfInputs;
+    count = model.numberOfInputs;
     while (count--) {
       if (model.inputConnection[count] && model.inputConnection[count].filter.shouldUpdate()) {
         return true;
       }
     }
 
-    count = numberOfInputs;
+    count = model.numberOfInputs;
     while (count--) {
       if (publicAPI.getInputData(count) && publicAPI.getInputData(count).getMTime() > minOutputMTime) {
         return true;
@@ -718,9 +765,9 @@ function algo(publicAPI, model, numberOfInputs, numberOfOutputs) {
   }
 
   // Handle input if needed
-  if (numberOfInputs) {
+  if (model.numberOfInputs) {
     // Reserve inputs
-    var count = numberOfInputs;
+    var count = model.numberOfInputs;
     while (count--) {
       model.inputData.push(null);
       model.inputConnection.push(null);
@@ -729,6 +776,8 @@ function algo(publicAPI, model, numberOfInputs, numberOfOutputs) {
     // Expose public methods
     publicAPI.setInputData = setInputData;
     publicAPI.setInputConnection = setInputConnection;
+    publicAPI.addInputData = addInputData;
+    publicAPI.addInputConnection = addInputConnection;
     publicAPI.getInputData = getInputData;
     publicAPI.getInputConnection = getInputConnection;
   }
@@ -740,20 +789,20 @@ function algo(publicAPI, model, numberOfInputs, numberOfOutputs) {
 
   publicAPI.update = function () {
     var ins = [];
-    if (numberOfInputs) {
+    if (model.numberOfInputs) {
       var _count = 0;
-      while (_count < numberOfInputs) {
+      while (_count < model.numberOfInputs) {
         ins[_count] = publicAPI.getInputData(_count);
         _count++;
       }
     }
-    if (publicAPI.shouldUpdate()) {
+    if (publicAPI.shouldUpdate() && publicAPI.requestData) {
       publicAPI.requestData(ins, model.output);
     }
   };
 
   publicAPI.getNumberOfInputPorts = function () {
-    return numberOfInputs;
+    return model.numberOfInputs;
   };
   publicAPI.getNumberOfOutputPorts = function () {
     return numberOfOutputs;
@@ -773,7 +822,11 @@ function algo(publicAPI, model, numberOfInputs, numberOfOutputs) {
     while (model.inputArrayToProcess.length < inputPort) {
       model.inputArrayToProcess.push(null);
     }
-    model.inputArrayToProcess[inputPort] = { arrayName: arrayName, fieldAssociation: fieldAssociation, attributeType: attributeType };
+    model.inputArrayToProcess[inputPort] = {
+      arrayName: arrayName,
+      fieldAssociation: fieldAssociation,
+      attributeType: attributeType
+    };
   };
 }
 
@@ -781,32 +834,68 @@ function algo(publicAPI, model, numberOfInputs, numberOfOutputs) {
 // Event handling: onXXX(callback), invokeXXX(args...)
 // ----------------------------------------------------------------------------
 
+var EVENT_ABORT = exports.EVENT_ABORT = Symbol('Event abort');
+
 function event(publicAPI, model, eventName) {
   var callbacks = [];
   var previousDelete = publicAPI.delete;
+  var curCallbackID = 1;
 
-  function off(index) {
-    callbacks[index] = null;
+  function off(callbackID) {
+    for (var i = 0; i < callbacks.length; ++i) {
+      var _callbacks$i = _slicedToArray(callbacks[i], 1),
+          cbID = _callbacks$i[0];
+
+      if (cbID === callbackID) {
+        callbacks.splice(i, 1);
+        return;
+      }
+    }
   }
 
-  function on(index) {
+  function on(callbackID) {
     function unsubscribe() {
-      off(index);
+      off(callbackID);
     }
-    return Object.freeze({ unsubscribe: unsubscribe });
+    return Object.freeze({
+      unsubscribe: unsubscribe
+    });
   }
 
   function invoke() {
+    var _arguments = arguments;
+
     if (model.deleted) {
       vtkErrorMacro('instance deleted - cannot call any method');
       return;
     }
     /* eslint-disable prefer-rest-params */
-    for (var index = 0; index < callbacks.length; ++index) {
-      var cb = callbacks[index];
-      if (cb) {
-        cb.apply(publicAPI, arguments);
+    // Go through a copy of the callbacks array in case new callbacks
+    // get prepended within previous callbacks
+    var currentCallbacks = callbacks.slice();
+
+    var _loop = function _loop(index) {
+      var _currentCallbacks$ind = _slicedToArray(currentCallbacks[index], 3),
+          cb = _currentCallbacks$ind[1],
+          priority = _currentCallbacks$ind[2];
+
+      if (priority < 0) {
+        setTimeout(function () {
+          return cb.apply(publicAPI, _arguments);
+        }, 1 - priority);
+      } else if (cb) {
+        // Abort only if the callback explicitly returns false
+        var continueNext = cb.apply(publicAPI, _arguments);
+        if (continueNext === EVENT_ABORT) {
+          return 'break';
+        }
       }
+    };
+
+    for (var index = 0; index < currentCallbacks.length; ++index) {
+      var _ret = _loop(index);
+
+      if (_ret === 'break') break;
     }
     /* eslint-enable prefer-rest-params */
   }
@@ -814,20 +903,28 @@ function event(publicAPI, model, eventName) {
   publicAPI['invoke' + capitalize(eventName)] = invoke;
 
   publicAPI['on' + capitalize(eventName)] = function (callback) {
+    var priority = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0.0;
+
     if (model.deleted) {
       vtkErrorMacro('instance deleted - cannot call any method');
       return null;
     }
 
-    var index = callbacks.length;
-    callbacks.push(callback);
-    return on(index);
+    var callbackID = curCallbackID++;
+    callbacks.push([callbackID, callback, priority]);
+    callbacks.sort(function (cb1, cb2) {
+      return cb2[2] - cb1[2];
+    });
+    return on(callbackID);
   };
 
   publicAPI.delete = function () {
     previousDelete();
-    callbacks.forEach(function (el, index) {
-      return off(index);
+    callbacks.forEach(function (_ref) {
+      var _ref2 = _slicedToArray(_ref, 1),
+          cbID = _ref2[0];
+
+      return off(cbID);
     });
   };
 }
@@ -926,7 +1023,7 @@ function traverseInstanceTree(instance, extractFunction) {
 function debounce(func, wait, immediate) {
   var _this = this;
 
-  var timeout;
+  var timeout = void 0;
   return function () {
     for (var _len5 = arguments.length, args = Array(_len5), _key5 = 0; _key5 < _len5; _key5++) {
       args[_key5] = arguments[_key5];
@@ -949,10 +1046,352 @@ function debounce(func, wait, immediate) {
 }
 
 // ----------------------------------------------------------------------------
+// proxy(publicAPI, model, sectionName, propertyUI)
+//
+//    - sectionName: Name of the section for UI
+//    - propertyUI: List of props with their UI description
+//
+// Generated API
+//  getProxyId() : String
+//  listProxyProperties() : [string]
+//  updateProxyProperty(name, prop)
+//  getProxySection() => List of properties for UI generation
+// ----------------------------------------------------------------------------
+var nextProxyId = 1;
+var ROOT_GROUP_NAME = '__root__';
+
+function proxy(publicAPI, model) {
+  var parentDelete = publicAPI.delete;
+
+  // getProxyId
+  model.proxyId = '' + nextProxyId++;
+
+  // ui handling
+  model.ui = JSON.parse(JSON.stringify(model.ui || [])); // deep copy
+  get(publicAPI, model, ['proxyId', 'proxyGroup', 'proxyName']);
+  setGet(publicAPI, model, ['proxyManager']);
+
+  // group properties
+  var propertyMap = {};
+  var groupChildrenNames = {};
+
+  function registerProperties(descriptionList, currentGroupName) {
+    if (!groupChildrenNames[currentGroupName]) {
+      groupChildrenNames[currentGroupName] = [];
+    }
+    var childrenNames = groupChildrenNames[currentGroupName];
+
+    for (var i = 0; i < descriptionList.length; i++) {
+      childrenNames.push(descriptionList[i].name);
+      propertyMap[descriptionList[i].name] = descriptionList[i];
+      if (descriptionList[i].children && descriptionList[i].children.length) {
+        registerProperties(descriptionList[i].children, descriptionList[i].name);
+      }
+    }
+  }
+  registerProperties(model.ui, ROOT_GROUP_NAME);
+
+  publicAPI.updateUI = function (ui) {
+    model.ui = JSON.parse(JSON.stringify(ui || [])); // deep copy
+    Object.keys(propertyMap).forEach(function (k) {
+      return delete propertyMap[k];
+    });
+    Object.keys(groupChildrenNames).forEach(function (k) {
+      return delete groupChildrenNames[k];
+    });
+    registerProperties(model.ui, ROOT_GROUP_NAME);
+    publicAPI.modified();
+  };
+
+  function listProxyProperties() {
+    var gName = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : ROOT_GROUP_NAME;
+
+    return groupChildrenNames[gName];
+  }
+
+  publicAPI.updateProxyProperty = function (propertyName, propUI) {
+    var prop = propertyMap[propertyName];
+    if (prop) {
+      Object.assign(prop, propUI);
+    }
+  };
+
+  // property link
+  model.propertyLinkSubscribers = [];
+  publicAPI.registerPropertyLinkForGC = function (otherLink) {
+    model.propertyLinkSubscribers.push(otherLink);
+  };
+
+  publicAPI.gcPropertyLinks = function () {
+    while (model.propertyLinkSubscribers.length) {
+      model.propertyLinkSubscribers.pop().unbind(publicAPI);
+    }
+  };
+
+  model.propertyLinkMap = {};
+  publicAPI.getPropertyLink = function (id) {
+    if (model.propertyLinkMap[id]) {
+      return model.propertyLinkMap[id];
+    }
+    var value = null;
+    var links = [];
+    var count = 0;
+    var updateInProgress = false;
+
+    function update(source) {
+      var force = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : false;
+
+      if (updateInProgress) {
+        return null;
+      }
+
+      var needUpdate = [];
+      var sourceLink = null;
+      count = links.length;
+      while (count--) {
+        var link = links[count];
+        if (link.instance === source) {
+          sourceLink = link;
+        } else {
+          needUpdate.push(link);
+        }
+      }
+
+      var newValue = sourceLink.instance['get' + capitalize(sourceLink.propertyName)]();
+      if (newValue !== value || force) {
+        value = newValue;
+        updateInProgress = true;
+        while (needUpdate.length) {
+          var linkToUpdate = needUpdate.pop();
+          linkToUpdate.instance.set(_defineProperty({}, linkToUpdate.propertyName, value));
+        }
+        updateInProgress = false;
+      }
+      return newValue;
+    }
+
+    function unbind(instance, propertyName) {
+      var indexToDelete = [];
+      count = links.length;
+      while (count--) {
+        var link = links[count];
+        if (link.instance === instance && (link.propertyName === propertyName || propertyName === undefined)) {
+          link.subscription.unsubscribe();
+          indexToDelete.push(count);
+        }
+      }
+      while (indexToDelete.length) {
+        links.splice(indexToDelete.pop(), 1);
+      }
+    }
+
+    function bind(instance, propertyName) {
+      var updateMe = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : false;
+
+      var subscription = instance.onModified(update);
+      var other = links[0];
+      links.push({
+        instance: instance,
+        propertyName: propertyName,
+        subscription: subscription
+      });
+      if (updateMe && other) {
+        update(other.instance, true);
+      }
+      return {
+        unsubscribe: function unsubscribe() {
+          return unbind(instance, propertyName);
+        }
+      };
+    }
+
+    function unsubscribe() {
+      while (links.length) {
+        links.pop().subscription.unsubscribe();
+      }
+    }
+
+    var linkHandler = {
+      bind: bind,
+      unbind: unbind,
+      unsubscribe: unsubscribe
+    };
+    model.propertyLinkMap[id] = linkHandler;
+    return linkHandler;
+  };
+
+  // extract values
+  function getProperties() {
+    var groupName = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : ROOT_GROUP_NAME;
+
+    var values = [];
+    var id = model.proxyId;
+    var propertyNames = listProxyProperties(groupName) || [];
+    for (var i = 0; i < propertyNames.length; i++) {
+      var name = propertyNames[i];
+      var method = publicAPI['get' + capitalize(name)];
+      var value = method ? method() : undefined;
+      var prop = {
+        id: id,
+        name: name,
+        value: value
+      };
+      var children = getProperties(name);
+      if (children.length) {
+        prop.children = children;
+      }
+      values.push(prop);
+    }
+    return values;
+  }
+
+  publicAPI.listPropertyNames = function () {
+    return getProperties().map(function (p) {
+      return p.name;
+    });
+  };
+
+  publicAPI.getPropertyByName = function (name) {
+    return getProperties().find(function (p) {
+      return p.name === name;
+    });
+  };
+
+  // ui section
+  publicAPI.getProxySection = function () {
+    return {
+      id: model.proxyId,
+      name: model.proxyGroup,
+      ui: model.ui,
+      properties: getProperties()
+    };
+  };
+
+  // free resources
+  publicAPI.delete = function () {
+    var list = Object.keys(model.propertyLinkMap);
+    var count = list.length;
+    while (count--) {
+      model.propertyLinkMap[list[count]].unsubscribe();
+    }
+    count = model.propertyLinkSubscribers.length;
+    while (count--) {
+      model.propertyLinkSubscribers[count].unbind(publicAPI);
+    }
+    parentDelete();
+  };
+}
+
+// ----------------------------------------------------------------------------
+// proxyPropertyMapping(publicAPI, model, map)
+//
+//   map = {
+//      opacity: { modelKey: 'property', property: 'opacity' },
+//   }
+//
+// Generated API:
+//  Elevate set/get methods from internal object stored in the model to current one
+// ----------------------------------------------------------------------------
+
+function proxyPropertyMapping(publicAPI, model, map) {
+  var parentDelete = publicAPI.delete;
+  var subscriptions = [];
+
+  var propertyNames = Object.keys(map);
+  var count = propertyNames.length;
+  while (count--) {
+    var propertyName = propertyNames[count];
+    var _map$propertyName = map[propertyName],
+        modelKey = _map$propertyName.modelKey,
+        property = _map$propertyName.property;
+
+    var methodSrc = capitalize(property);
+    var methodDst = capitalize(propertyName);
+    publicAPI['get' + methodDst] = model[modelKey]['get' + methodSrc];
+    publicAPI['set' + methodDst] = model[modelKey]['set' + methodSrc];
+    subscriptions.push(model[modelKey].onModified(publicAPI.modified));
+  }
+
+  publicAPI.delete = function () {
+    while (subscriptions.length) {
+      subscriptions.pop().unsubscribe();
+    }
+    parentDelete();
+  };
+}
+
+// ----------------------------------------------------------------------------
+// proxyPropertyState(publicAPI, model, state, defaults)
+//
+//   state = {
+//     representation: {
+//       'Surface with edges': { property: { edgeVisibility: true, representation: 2 } },
+//       Surface: { property: { edgeVisibility: false, representation: 2 } },
+//       Wireframe: { property: { edgeVisibility: false, representation: 1 } },
+//       Points: { property: { edgeVisibility: false, representation: 0 } },
+//     },
+//   }
+//
+//   defaults = {
+//      representation: 'Surface',
+//   }
+//
+// Generated API
+//   get / set Representation ( string ) => push state to various internal objects
+// ----------------------------------------------------------------------------
+
+function proxyPropertyState(publicAPI, model) {
+  var state = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+  var defaults = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : {};
+
+  model.this = publicAPI;
+
+  function applyState(map) {
+    var modelKeys = Object.keys(map);
+    var count = modelKeys.length;
+    while (count--) {
+      var modelKey = modelKeys[count];
+      model[modelKey].set(map[modelKey]);
+    }
+  }
+
+  var modelKeys = Object.keys(defaults);
+  var count = modelKeys.length;
+
+  var _loop2 = function _loop2() {
+    // Add default
+    var key = modelKeys[count];
+    model[key] = defaults[key];
+
+    // Add set method
+    var mapping = state[key];
+    publicAPI['set' + capitalize(key)] = function (value) {
+      if (value !== model[key]) {
+        model[key] = value;
+        var propValues = mapping[value];
+        applyState(propValues);
+        publicAPI.modified();
+      }
+    };
+  };
+
+  while (count--) {
+    _loop2();
+  }
+
+  // Add getter
+  if (modelKeys.length) {
+    get(publicAPI, model, modelKeys);
+  }
+}
+
+// ----------------------------------------------------------------------------
 // Default export
 // ----------------------------------------------------------------------------
 
 exports.default = {
+  EVENT_ABORT: EVENT_ABORT,
+  VOID: VOID,
   algo: algo,
   capitalize: capitalize,
   chain: chain,
@@ -977,9 +1416,12 @@ exports.default = {
   vtkInfoMacro: vtkInfoMacro,
   vtkLogMacro: vtkLogMacro,
   vtkWarningMacro: vtkWarningMacro,
-  debounce: debounce
+  debounce: debounce,
+  proxy: proxy,
+  proxyPropertyMapping: proxyPropertyMapping,
+  proxyPropertyState: proxyPropertyState
 };
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(4)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(5)))
 
 /***/ }),
 /* 1 */
@@ -994,7 +1436,7 @@ Object.defineProperty(exports, "__esModule", {
 
 var _slicedToArray = function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; }();
 
-var _seedrandom = __webpack_require__(179);
+var _seedrandom = __webpack_require__(174);
 
 var _seedrandom2 = _interopRequireDefault(_seedrandom);
 
@@ -1055,12 +1497,13 @@ var radiansFromDegrees = function radiansFromDegrees(deg) {
 var degreesFromRadians = function degreesFromRadians(rad) {
   return rad * 180 / Math.PI;
 };
-var round = Math.round;
-var floor = Math.floor;
-var ceil = Math.ceil;
+var round = Math.round,
+    floor = Math.floor,
+    ceil = Math.ceil,
+    min = Math.min,
+    max = Math.max;
+
 var ceilLog2 = notImplemented('ceilLog2');
-var min = Math.min;
-var max = Math.max;
 var factorial = notImplemented('factorial');
 
 function nearestPowerOfTwo(xi) {
@@ -2428,7 +2871,6 @@ function solveLeastSquares(numberOfSamples, xt, xOrder, yt, yOrder, mt) {
     // since that's just yOrder occurrences of a 0 vector on the RHS, but
     // we allow it anyway. N
 
-
     // Initialize homogeneous flags on a per-right-hand-side basis
     for (j = 0; j < yOrder; j++) {
       homogenFlags[j] = 1;
@@ -2549,6 +2991,46 @@ function solveLeastSquares(numberOfSamples, xt, xOrder, yt, yOrder, mt) {
   }
 
   return successFlag;
+}
+
+function hex2float(hexStr) {
+  var outFloatArray = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : [0, 0.5, 1];
+
+  switch (hexStr.length) {
+    case 3:
+      // abc => #aabbcc
+      outFloatArray[0] = parseInt(hexStr[0], 16) * 17 / 255;
+      outFloatArray[1] = parseInt(hexStr[1], 16) * 17 / 255;
+      outFloatArray[2] = parseInt(hexStr[2], 16) * 17 / 255;
+      return outFloatArray;
+    case 4:
+      // #abc => #aabbcc
+      outFloatArray[0] = parseInt(hexStr[1], 16) * 17 / 255;
+      outFloatArray[1] = parseInt(hexStr[2], 16) * 17 / 255;
+      outFloatArray[2] = parseInt(hexStr[3], 16) * 17 / 255;
+      return outFloatArray;
+    case 6:
+      // ab01df => #ab01df
+      outFloatArray[0] = parseInt(hexStr.substr(0, 2), 16) / 255;
+      outFloatArray[1] = parseInt(hexStr.substr(2, 2), 16) / 255;
+      outFloatArray[2] = parseInt(hexStr.substr(4, 2), 16) / 255;
+      return outFloatArray;
+    case 7:
+      // #ab01df
+      outFloatArray[0] = parseInt(hexStr.substr(1, 2), 16) / 255;
+      outFloatArray[1] = parseInt(hexStr.substr(3, 2), 16) / 255;
+      outFloatArray[2] = parseInt(hexStr.substr(5, 2), 16) / 255;
+      return outFloatArray;
+    case 9:
+      // #ab01df00
+      outFloatArray[0] = parseInt(hexStr.substr(1, 2), 16) / 255;
+      outFloatArray[1] = parseInt(hexStr.substr(3, 2), 16) / 255;
+      outFloatArray[2] = parseInt(hexStr.substr(5, 2), 16) / 255;
+      outFloatArray[3] = parseInt(hexStr.substr(7, 2), 16) / 255;
+      return outFloatArray;
+    default:
+      return outFloatArray;
+  }
 }
 
 function rgb2hsv(rgb, hsv) {
@@ -2696,7 +3178,7 @@ function lab2xyz(lab, xyz) {
     var_Z = (var_Z - 16.0 / 116.0) / 7.787;
   }
   var ref_X = 0.9505;
-  var ref_Y = 1.000;
+  var ref_Y = 1.0;
   var ref_Z = 1.089;
   xyz[0] = ref_X * var_X; // ref_X = 0.9505  Observer= 2 deg Illuminant= D65
   xyz[1] = ref_Y * var_Y; // ref_Y = 1.000
@@ -2710,15 +3192,21 @@ function xyz2lab(xyz, lab) {
       z = _xyz[2];
 
   var ref_X = 0.9505;
-  var ref_Y = 1.000;
+  var ref_Y = 1.0;
   var ref_Z = 1.089;
   var var_X = x / ref_X; // ref_X = 0.9505  Observer= 2 deg, Illuminant= D65
   var var_Y = y / ref_Y; // ref_Y = 1.000
   var var_Z = z / ref_Z; // ref_Z = 1.089
 
-  if (var_X > 0.008856) var_X = Math.pow(var_X, 1.0 / 3.0);else var_X = 7.787 * var_X + 16.0 / 116.0;
-  if (var_Y > 0.008856) var_Y = Math.pow(var_Y, 1.0 / 3.0);else var_Y = 7.787 * var_Y + 16.0 / 116.0;
-  if (var_Z > 0.008856) var_Z = Math.pow(var_Z, 1.0 / 3.0);else var_Z = 7.787 * var_Z + 16.0 / 116.0;
+  if (var_X > 0.008856) {
+    var_X = Math.pow(var_X, 1.0 / 3.0);
+  } else var_X = 7.787 * var_X + 16.0 / 116.0;
+  if (var_Y > 0.008856) {
+    var_Y = Math.pow(var_Y, 1.0 / 3.0);
+  } else var_Y = 7.787 * var_Y + 16.0 / 116.0;
+  if (var_Z > 0.008856) {
+    var_Z = Math.pow(var_Z, 1.0 / 3.0);
+  } else var_Z = 7.787 * var_Z + 16.0 / 116.0;
 
   lab[0] = 116 * var_Y - 16;
   lab[1] = 500 * (var_X - var_Y);
@@ -2733,7 +3221,7 @@ function xyz2rgb(xyz, rgb) {
 
   var r = x * 3.2406 + y * -1.5372 + z * -0.4986;
   var g = x * -0.9689 + y * 1.8758 + z * 0.0415;
-  var b = x * 0.0557 + y * -0.2040 + z * 1.0570;
+  var b = x * 0.0557 + y * -0.204 + z * 1.057;
 
   // The following performs a "gamma correction" specified by the sRGB color
   // space.  sRGB is defined by a canonical definition of a display monitor and
@@ -2931,8 +3419,8 @@ var negInf = -Infinity;
 var isInf = function isInf(value) {
   return !Number.isFinite(value);
 };
-var isNan = Number.isNaN;
-var isFinite = Number.isFinite;
+var isFinite = Number.isFinite,
+    isNaN = Number.isNaN;
 
 // JavaScript - add-on ----------------------
 
@@ -3014,6 +3502,7 @@ exports.default = {
   jacobiN: jacobiN,
   solveHomogeneousLeastSquares: solveHomogeneousLeastSquares,
   solveLeastSquares: solveLeastSquares,
+  hex2float: hex2float,
   rgb2hsv: rgb2hsv,
   hsv2rgb: hsv2rgb,
   lab2xyz: lab2xyz,
@@ -3035,7 +3524,8 @@ exports.default = {
   inf: inf,
   negInf: negInf,
   isInf: isInf,
-  isNan: isNan,
+  isNan: isNaN,
+  isNaN: isNaN,
   isFinite: isFinite,
 
   // JS add-on
@@ -3051,9 +3541,9 @@ exports.default = {
 
 var support = __webpack_require__(12);
 var base64 = __webpack_require__(79);
-var nodejsUtils = __webpack_require__(29);
-var setImmediate = __webpack_require__(143);
-var external = __webpack_require__(23);
+var nodejsUtils = __webpack_require__(30);
+var setImmediate = __webpack_require__(146);
+var external = __webpack_require__(25);
 
 
 /**
@@ -3560,44 +4050,17 @@ THE SOFTWARE. */
 // END HEADER
 
 exports.glMatrix = __webpack_require__(10);
-exports.mat2 = __webpack_require__(174);
-exports.mat2d = __webpack_require__(175);
+exports.mat2 = __webpack_require__(187);
+exports.mat2d = __webpack_require__(188);
 exports.mat3 = __webpack_require__(96);
-exports.mat4 = __webpack_require__(176);
-exports.quat = __webpack_require__(177);
-exports.vec2 = __webpack_require__(178);
+exports.mat4 = __webpack_require__(189);
+exports.quat = __webpack_require__(190);
+exports.vec2 = __webpack_require__(191);
 exports.vec3 = __webpack_require__(97);
 exports.vec4 = __webpack_require__(98);
 
 /***/ }),
 /* 4 */
-/***/ (function(module, exports) {
-
-var g;
-
-// This works in non-strict mode
-g = (function() {
-	return this;
-})();
-
-try {
-	// This works if eval is allowed (see CSP)
-	g = g || Function("return this")() || (1,eval)("this");
-} catch(e) {
-	// This works if the window reference is available
-	if(typeof window === "object")
-		g = window;
-}
-
-// g can still be undefined, but nothing to do about it...
-// We return undefined, instead of nothing here, so it's
-// easier to handle this case. if(!global) { ...}
-
-module.exports = g;
-
-
-/***/ }),
-/* 5 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -3609,18 +4072,21 @@ Object.defineProperty(exports, "__esModule", {
 exports.newInstance = exports.STATIC = undefined;
 exports.extend = extend;
 
-var _macro = __webpack_require__(0);
-
-var _macro2 = _interopRequireDefault(_macro);
-
 var _Constants = __webpack_require__(9);
 
 var _Constants2 = _interopRequireDefault(_Constants);
 
+var _macro = __webpack_require__(0);
+
+var _macro2 = _interopRequireDefault(_macro);
+
+var _Math = __webpack_require__(1);
+
+var _Math2 = _interopRequireDefault(_Math);
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 var DefaultDataType = _Constants2.default.DefaultDataType;
-var vtkErrorMacro = _macro2.default.vtkErrorMacro;
 
 var TUPLE_HOLDER = [];
 
@@ -3628,30 +4094,60 @@ var TUPLE_HOLDER = [];
 // Global methods
 // ----------------------------------------------------------------------------
 
+function createRangeHelper() {
+  var min = Number.MAX_VALUE;
+  var max = -Number.MAX_VALUE;
+  var count = 0;
+  var sum = 0;
+
+  return {
+    add: function add(value) {
+      if (min > value) {
+        min = value;
+      }
+      if (max < value) {
+        max = value;
+      }
+      count++;
+      sum += value;
+    },
+    get: function get() {
+      return { min: min, max: max, count: count, sum: sum, mean: sum / count };
+    },
+    getRange: function getRange() {
+      return { min: min, max: max };
+    }
+  };
+}
+
 function computeRange(values) {
   var component = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
-  var tuple = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : 1;
+  var numberOfComponents = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : 1;
 
-  var range = { min: Number.MAX_VALUE, max: -Number.MAX_VALUE };
-
-  if (component < 0) {
-    // Compute magnitude
-    vtkErrorMacro('vtkDataArray: Compute magnitude - NOT IMPLEMENTED');
-    return range;
-  }
-
+  var helper = createRangeHelper();
   var size = values.length;
-  for (var i = component; i < size; i += tuple) {
-    var value = values[i];
-    if (range.min > value) {
-      range.min = value;
+  var value = 0;
+
+  if (component < 0 && numberOfComponents > 1) {
+    // Compute magnitude
+    for (var i = 0; i < size; i += numberOfComponents) {
+      value = 0;
+      for (var j = 0; j < numberOfComponents; j++) {
+        value += values[i + j] * values[i + j];
+      }
+      value = Math.pow(value, 0.5);
+
+      helper.add(value);
     }
-    if (range.max < value) {
-      range.max = value;
-    }
+    return helper.getRange();
   }
 
-  return range;
+  var offset = component < 0 ? 0 : component;
+  for (var _i = offset; _i < size; _i += numberOfComponents) {
+    helper.add(values[_i]);
+  }
+
+  return helper.getRange();
 }
 
 function ensureRangeSize(rangeArray) {
@@ -3669,13 +4165,27 @@ function getDataType(typedArray) {
   return Object.prototype.toString.call(typedArray).split(' ')[1].slice(0, -1);
 }
 
+function getMaxNorm(normArray) {
+  var numComps = normArray.getNumberOfComponents();
+  var maxNorm = 0.0;
+  for (var i = 0; i < normArray.getNumberOfTuples(); ++i) {
+    var norm = _Math2.default.norm(normArray.getTuple(i), numComps);
+    if (norm > maxNorm) {
+      maxNorm = norm;
+    }
+  }
+  return maxNorm;
+}
+
 // ----------------------------------------------------------------------------
 // Static API
 // ----------------------------------------------------------------------------
 
 var STATIC = exports.STATIC = {
   computeRange: computeRange,
-  getDataType: getDataType
+  createRangeHelper: createRangeHelper,
+  getDataType: getDataType,
+  getMaxNorm: getMaxNorm
 };
 
 // ----------------------------------------------------------------------------
@@ -3721,7 +4231,7 @@ function vtkDataArray(publicAPI, model) {
   };
 
   publicAPI.getRange = function () {
-    var componentIndex = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : 0;
+    var componentIndex = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : -1;
 
     var rangeIdx = componentIndex < 0 ? model.numberOfComponents : componentIndex;
     var range = null;
@@ -3822,7 +4332,9 @@ function vtkDataArray(publicAPI, model) {
 
   // Override serialization support
   publicAPI.getState = function () {
-    var jsonArchive = Object.assign({}, model, { vtkClass: publicAPI.getClassName() });
+    var jsonArchive = Object.assign({}, model, {
+      vtkClass: publicAPI.getClassName()
+    });
 
     // Convert typed array to regular array
     jsonArchive.values = Array.from(jsonArchive.values);
@@ -3903,6 +4415,33 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, STATIC, _Constants2.default);
 
 /***/ }),
+/* 5 */
+/***/ (function(module, exports) {
+
+var g;
+
+// This works in non-strict mode
+g = (function() {
+	return this;
+})();
+
+try {
+	// This works if eval is allowed (see CSP)
+	g = g || Function("return this")() || (1,eval)("this");
+} catch(e) {
+	// This works if the window reference is available
+	if(typeof window === "object")
+		g = window;
+}
+
+// g can still be undefined, but nothing to do about it...
+// We return undefined, instead of nothing here, so it's
+// easier to handle this case. if(!global) { ...}
+
+module.exports = g;
+
+
+/***/ }),
 /* 6 */
 /***/ (function(module, exports, __webpack_require__) {
 
@@ -3912,8 +4451,6 @@ exports.default = Object.assign({ newInstance: newInstance, extend: extend }, ST
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.newInstance = exports.PASS_TYPES = undefined;
-exports.extend = extend;
 
 var _macro = __webpack_require__(0);
 
@@ -3922,7 +4459,9 @@ var _macro2 = _interopRequireDefault(_macro);
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 var vtkErrorMacro = _macro2.default.vtkErrorMacro;
-var PASS_TYPES = exports.PASS_TYPES = ['Build', 'Render'];
+
+
+var PASS_TYPES = ['Build', 'Render'];
 
 // ----------------------------------------------------------------------------
 // vtkViewNode methods
@@ -4119,7 +4658,7 @@ function extend(publicAPI, model) {
 
 // ----------------------------------------------------------------------------
 
-var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtkViewNode');
+var newInstance = _macro2.default.newInstance(extend, 'vtkViewNode');
 
 // ----------------------------------------------------------------------------
 
@@ -4670,15 +5209,12 @@ try {
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.newInstance = undefined;
-exports.substitute = substitute;
-exports.extend = extend;
 
 var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _Shader = __webpack_require__(202);
+var _Shader = __webpack_require__(206);
 
 var _Shader2 = _interopRequireDefault(_Shader);
 
@@ -5291,7 +5827,7 @@ function extend(publicAPI, model) {
 
 // ----------------------------------------------------------------------------
 
-var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtkShaderProgram');
+var newInstance = _macro2.default.newInstance(extend, 'vtkShaderProgram');
 
 // ----------------------------------------------------------------------------
 
@@ -5311,7 +5847,6 @@ Object.defineProperty(exports, "__esModule", {
 var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; };
 
 exports.default = vtk;
-exports.register = register;
 var factoryMapping = {
   vtkObject: function vtkObject() {
     return null;
@@ -5363,7 +5898,7 @@ function register(vtkClassName, constructor) {
 
 // Nest register method under the vtk function
 vtk.register = register;
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(4)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(5)))
 
 /***/ }),
 /* 15 */
@@ -5400,7 +5935,7 @@ vtk.register = register;
 
 /*<replacement>*/
 
-var processNextTick = __webpack_require__(28);
+var processNextTick = __webpack_require__(29);
 /*</replacement>*/
 
 /*<replacement>*/
@@ -5415,12 +5950,12 @@ var objectKeys = Object.keys || function (obj) {
 module.exports = Duplex;
 
 /*<replacement>*/
-var util = __webpack_require__(22);
+var util = __webpack_require__(24);
 util.inherits = __webpack_require__(18);
 /*</replacement>*/
 
 var Readable = __webpack_require__(73);
-var Writable = __webpack_require__(45);
+var Writable = __webpack_require__(47);
 
 util.inherits(Duplex, Readable);
 
@@ -5504,7 +6039,7 @@ function forEach(xs, f) {
 
 var utils = __webpack_require__(2);
 var support = __webpack_require__(12);
-var nodejsUtils = __webpack_require__(29);
+var nodejsUtils = __webpack_require__(30);
 var GenericWorker = __webpack_require__(7);
 
 /**
@@ -5792,8 +6327,8 @@ exports.Utf8EncodeWorker = Utf8EncodeWorker;
 
 
 
-var base64 = __webpack_require__(41)
-var ieee754 = __webpack_require__(132)
+var base64 = __webpack_require__(43)
+var ieee754 = __webpack_require__(135)
 var isArray = __webpack_require__(71)
 
 exports.Buffer = Buffer
@@ -7572,7 +8107,7 @@ function isnan (val) {
   return val !== val // eslint-disable-line no-self-compare
 }
 
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(4)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(5)))
 
 /***/ }),
 /* 18 */
@@ -7645,13 +8180,243 @@ module.exports = __webpack_amd_options__;
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.newInstance = undefined;
+exports.extend = extend;
+
+var _macro = __webpack_require__(0);
+
+var _macro2 = _interopRequireDefault(_macro);
+
+var _DataArray = __webpack_require__(4);
+
+var _DataArray2 = _interopRequireDefault(_DataArray);
+
+var _Constants = __webpack_require__(9);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var vtkErrorMacro = _macro2.default.vtkErrorMacro;
+
+
+var INVALID_BOUNDS = [1, -1, 1, -1, 1, -1];
+
+// ----------------------------------------------------------------------------
+// vtkPoints methods
+// ----------------------------------------------------------------------------
+
+function vtkPoints(publicAPI, model) {
+  // Set our className
+  model.classHierarchy.push('vtkPoints');
+
+  // Forwarding methods
+  publicAPI.getNumberOfPoints = publicAPI.getNumberOfTuples;
+
+  publicAPI.setNumberOfPoints = function (nbPoints) {
+    var dimension = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 3;
+
+    if (publicAPI.getNumberOfPoints() !== nbPoints) {
+      model.size = nbPoints * dimension;
+      model.values = new window[model.dataType](model.size);
+      publicAPI.setNumberOfComponents(dimension);
+      publicAPI.modified();
+    }
+  };
+
+  publicAPI.setPoint = function (idx) {
+    for (var _len = arguments.length, xyz = Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
+      xyz[_key - 1] = arguments[_key];
+    }
+
+    var offset = idx * model.numberOfComponents;
+    for (var i = 0; i < model.numberOfComponents; i++) {
+      model.values[offset + i] = xyz[i];
+    }
+  };
+
+  publicAPI.getPoint = publicAPI.getTuple;
+
+  publicAPI.getBounds = function () {
+    if (publicAPI.getNumberOfComponents() === 3) {
+      var _xRange = publicAPI.getRange(0);
+      model.bounds[0] = _xRange[0];
+      model.bounds[1] = _xRange[1];
+      var _yRange = publicAPI.getRange(1);
+      model.bounds[2] = _yRange[0];
+      model.bounds[3] = _yRange[1];
+      var zRange = publicAPI.getRange(2);
+      model.bounds[4] = zRange[0];
+      model.bounds[5] = zRange[1];
+      return model.bounds;
+    }
+
+    if (publicAPI.getNumberOfComponents() !== 2) {
+      vtkErrorMacro('getBounds called on an array with components of\n        ' + publicAPI.getNumberOfComponents());
+      return INVALID_BOUNDS;
+    }
+
+    var xRange = publicAPI.getRange(0);
+    model.bounds[0] = xRange[0];
+    model.bounds[1] = xRange[1];
+    var yRange = publicAPI.getRange(1);
+    model.bounds[2] = yRange[0];
+    model.bounds[3] = yRange[1];
+    model.bounds[4] = 0;
+    model.bounds[5] = 0;
+
+    return model.bounds;
+  };
+
+  // Trigger the computation of bounds
+  publicAPI.computeBounds = publicAPI.getBounds;
+}
+
+// ----------------------------------------------------------------------------
+// Object factory
+// ----------------------------------------------------------------------------
+
+var DEFAULT_VALUES = {
+  empty: true,
+  numberOfComponents: 3,
+  dataType: _Constants.VtkDataTypes.FLOAT,
+  bounds: [1, -1, 1, -1, 1, -1]
+};
+
+// ----------------------------------------------------------------------------
+
+function extend(publicAPI, model) {
+  var initialValues = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+
+  Object.assign(model, DEFAULT_VALUES, initialValues);
+
+  _DataArray2.default.extend(publicAPI, model, initialValues);
+  vtkPoints(publicAPI, model);
+}
+
+// ----------------------------------------------------------------------------
+
+var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtkPoints');
+
+// ----------------------------------------------------------------------------
+
+exports.default = { newInstance: newInstance, extend: extend };
+
+/***/ }),
+/* 22 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.newInstance = undefined;
+exports.extend = extend;
+
+var _macro = __webpack_require__(0);
+
+var _macro2 = _interopRequireDefault(_macro);
+
+var _vtk = __webpack_require__(14);
+
+var _vtk2 = _interopRequireDefault(_vtk);
+
+var _CellArray = __webpack_require__(238);
+
+var _CellArray2 = _interopRequireDefault(_CellArray);
+
+var _PointSet = __webpack_require__(239);
+
+var _PointSet2 = _interopRequireDefault(_PointSet);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var POLYDATA_FIELDS = ['verts', 'lines', 'polys', 'strips'];
+
+// ----------------------------------------------------------------------------
+// vtkPolyData methods
+// ----------------------------------------------------------------------------
+
+function vtkPolyData(publicAPI, model) {
+  // Set our className
+  model.classHierarchy.push('vtkPolyData');
+
+  function camelize(str) {
+    return str.replace(/(?:^\w|[A-Z]|\b\w)/g, function (letter, index) {
+      return index === 0 ? letter.toLowerCase() : letter.toUpperCase();
+    }).replace(/\s+/g, '');
+  }
+
+  // build empty cell arrays and set methods
+  POLYDATA_FIELDS.forEach(function (type) {
+    publicAPI['getNumberOf' + camelize(type)] = function () {
+      return model[type].getNumberOfCells();
+    };
+    if (!model[type]) {
+      model[type] = _CellArray2.default.newInstance();
+    } else {
+      model[type] = (0, _vtk2.default)(model[type]);
+    }
+  });
+
+  publicAPI.getNumberOfCells = function () {
+    return POLYDATA_FIELDS.reduce(function (num, cellType) {
+      return num + model[cellType].getNumberOfCells();
+    }, 0);
+  };
+}
+
+// ----------------------------------------------------------------------------
+// Object factory
+// ----------------------------------------------------------------------------
+
+var DEFAULT_VALUES = {
+  // verts: null,
+  // lines: null,
+  // polys: null,
+  // strips: null,
+};
+
+// ----------------------------------------------------------------------------
+
+function extend(publicAPI, model) {
+  var initialValues = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+
+  Object.assign(model, DEFAULT_VALUES, initialValues);
+
+  // Inheritance
+  _PointSet2.default.extend(publicAPI, model, initialValues);
+  _macro2.default.setGet(publicAPI, model, ['verts', 'lines', 'polys', 'strips']);
+
+  // Object specific methods
+  vtkPolyData(publicAPI, model);
+}
+
+// ----------------------------------------------------------------------------
+
+var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtkPolyData');
+
+// ----------------------------------------------------------------------------
+
+exports.default = { newInstance: newInstance, extend: extend };
+
+/***/ }),
+/* 23 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
 // Top level file is just a mixin of submodules & constants
 
 
 var assign    = __webpack_require__(11).assign;
 
-var deflate   = __webpack_require__(119);
-var inflate   = __webpack_require__(122);
+var deflate   = __webpack_require__(122);
+var inflate   = __webpack_require__(125);
 var constants = __webpack_require__(68);
 
 var pako = {};
@@ -7662,7 +8427,7 @@ module.exports = pako;
 
 
 /***/ }),
-/* 22 */
+/* 24 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* WEBPACK VAR INJECTION */(function(Buffer) {// Copyright Joyent, Inc. and other Node contributors.
@@ -7776,7 +8541,7 @@ function objectToString(o) {
 /* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(17).Buffer))
 
 /***/ }),
-/* 23 */
+/* 25 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -7790,7 +8555,7 @@ var ES6Promise = null;
 if (typeof Promise !== "undefined") {
     ES6Promise = Promise;
 } else {
-    ES6Promise = __webpack_require__(157);
+    ES6Promise = __webpack_require__(160);
 }
 
 /**
@@ -7802,7 +8567,7 @@ module.exports = {
 
 
 /***/ }),
-/* 24 */
+/* 26 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -7814,7 +8579,7 @@ Object.defineProperty(exports, "__esModule", {
 exports.newInstance = undefined;
 exports.extend = extend;
 
-var _Constants = __webpack_require__(31);
+var _Constants = __webpack_require__(33);
 
 var _Constants2 = _interopRequireDefault(_Constants);
 
@@ -7822,7 +8587,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _DataArray = __webpack_require__(5);
+var _DataArray = __webpack_require__(4);
 
 var _DataArray2 = _interopRequireDefault(_DataArray);
 
@@ -8691,7 +9456,18 @@ function vtkOpenGLTexture(publicAPI, model) {
     publicAPI.bind();
 
     // store the information, we will need it later
-    model.volumeInfo = { encodedScalars: encodedScalars, min: min, max: max, width: width, height: height, depth: depth, xreps: xreps, yreps: yreps, xstride: xstride, ystride: ystride };
+    model.volumeInfo = {
+      encodedScalars: encodedScalars,
+      min: min,
+      max: max,
+      width: width,
+      height: height,
+      depth: depth,
+      xreps: xreps,
+      yreps: yreps,
+      xstride: xstride,
+      ystride: ystride
+    };
 
     // OK stuff the data into the 2d TEXTURE
 
@@ -8949,7 +9725,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, _Constants2.default);
 
 /***/ }),
-/* 25 */
+/* 27 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -8969,137 +9745,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 26 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.newInstance = undefined;
-exports.extend = extend;
-
-var _macro = __webpack_require__(0);
-
-var _macro2 = _interopRequireDefault(_macro);
-
-var _DataArray = __webpack_require__(5);
-
-var _DataArray2 = _interopRequireDefault(_DataArray);
-
-var _Constants = __webpack_require__(9);
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-var vtkErrorMacro = _macro2.default.vtkErrorMacro;
-
-
-var INVALID_BOUNDS = [1, -1, 1, -1, 1, -1];
-
-// ----------------------------------------------------------------------------
-// vtkPoints methods
-// ----------------------------------------------------------------------------
-
-function vtkPoints(publicAPI, model) {
-  // Set our className
-  model.classHierarchy.push('vtkPoints');
-
-  // Forwarding methods
-  publicAPI.getNumberOfPoints = publicAPI.getNumberOfTuples;
-
-  publicAPI.setNumberOfPoints = function (nbPoints) {
-    var dimension = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 3;
-
-    if (publicAPI.getNumberOfPoints() !== nbPoints) {
-      model.size = nbPoints * dimension;
-      model.values = new window[model.dataType](model.size);
-      publicAPI.setNumberOfComponents(dimension);
-      publicAPI.modified();
-    }
-  };
-
-  publicAPI.setPoint = function (idx) {
-    for (var _len = arguments.length, xyz = Array(_len > 1 ? _len - 1 : 0), _key = 1; _key < _len; _key++) {
-      xyz[_key - 1] = arguments[_key];
-    }
-
-    var offset = idx * model.numberOfComponents;
-    for (var i = 0; i < model.numberOfComponents; i++) {
-      model.values[offset + i] = xyz[i];
-    }
-  };
-
-  publicAPI.getPoint = publicAPI.getTuple;
-
-  publicAPI.getBounds = function () {
-    if (publicAPI.getNumberOfComponents() === 3) {
-      var _xRange = publicAPI.getRange(0);
-      model.bounds[0] = _xRange[0];
-      model.bounds[1] = _xRange[1];
-      var _yRange = publicAPI.getRange(1);
-      model.bounds[2] = _yRange[0];
-      model.bounds[3] = _yRange[1];
-      var zRange = publicAPI.getRange(2);
-      model.bounds[4] = zRange[0];
-      model.bounds[5] = zRange[1];
-      return model.bounds;
-    }
-
-    if (publicAPI.getNumberOfComponents() !== 2) {
-      vtkErrorMacro('getBounds called on an array with components of\n        ' + publicAPI.getNumberOfComponents());
-      return INVALID_BOUNDS;
-    }
-
-    var xRange = publicAPI.getRange(0);
-    model.bounds[0] = xRange[0];
-    model.bounds[1] = xRange[1];
-    var yRange = publicAPI.getRange(1);
-    model.bounds[2] = yRange[0];
-    model.bounds[3] = yRange[1];
-    model.bounds[4] = 0;
-    model.bounds[5] = 0;
-
-    return model.bounds;
-  };
-
-  // Trigger the computation of bounds
-  publicAPI.computeBounds = publicAPI.getBounds;
-}
-
-// ----------------------------------------------------------------------------
-// Object factory
-// ----------------------------------------------------------------------------
-
-var DEFAULT_VALUES = {
-  empty: true,
-  numberOfComponents: 3,
-  dataType: _Constants.VtkDataTypes.FLOAT,
-  bounds: [1, -1, 1, -1, 1, -1]
-};
-
-// ----------------------------------------------------------------------------
-
-function extend(publicAPI, model) {
-  var initialValues = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
-
-  Object.assign(model, DEFAULT_VALUES, initialValues);
-
-  _DataArray2.default.extend(publicAPI, model, initialValues);
-  vtkPoints(publicAPI, model);
-}
-
-// ----------------------------------------------------------------------------
-
-var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtkPoints');
-
-// ----------------------------------------------------------------------------
-
-exports.default = { newInstance: newInstance, extend: extend };
-
-/***/ }),
-/* 27 */
+/* 28 */
 /***/ (function(module, exports) {
 
 // shim for using process in browser
@@ -9289,7 +9935,7 @@ process.umask = function() { return 0; };
 
 
 /***/ }),
-/* 28 */
+/* 29 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9337,10 +9983,10 @@ function nextTick(fn, arg1, arg2, arg3) {
   }
 }
 
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(27)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(28)))
 
 /***/ }),
-/* 29 */
+/* 30 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9382,7 +10028,7 @@ module.exports = {
 /* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(17).Buffer))
 
 /***/ }),
-/* 30 */
+/* 31 */
 /***/ (function(module, exports) {
 
 // https://github.com/zloirock/core-js/issues/86#issuecomment-115759028
@@ -9394,7 +10040,74 @@ if (typeof __g == 'number') __g = global; // eslint-disable-line no-undef
 
 
 /***/ }),
-/* 31 */
+/* 32 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+var AttributeTypes = exports.AttributeTypes = {
+  SCALARS: 0,
+  VECTORS: 1,
+  NORMALS: 2,
+  TCOORDS: 3,
+  TENSORS: 4,
+  GLOBALIDS: 5,
+  PEDIGREEIDS: 6,
+  EDGEFLAG: 7,
+  NUM_ATTRIBUTES: 8
+};
+
+var AttributeLimitTypes = exports.AttributeLimitTypes = {
+  MAX: 0,
+  EXACT: 1,
+  NOLIMIT: 2
+};
+
+var CellGhostTypes = exports.CellGhostTypes = {
+  DUPLICATECELL: 1, // the cell is present on multiple processors
+  HIGHCONNECTIVITYCELL: 2, // the cell has more neighbors than in a regular mesh
+  LOWCONNECTIVITYCELL: 4, // the cell has less neighbors than in a regular mesh
+  REFINEDCELL: 8, // other cells are present that refines it.
+  EXTERIORCELL: 16, // the cell is on the exterior of the data set
+  HIDDENCELL: 32 // the cell is needed to maintain connectivity, but the data values should be ignored.
+};
+
+var PointGhostTypes = exports.PointGhostTypes = {
+  DUPLICATEPOINT: 1, // the cell is present on multiple processors
+  HIDDENPOINT: 2 // the point is needed to maintain connectivity, but the data values should be ignored.
+};
+
+var AttributeCopyOperations = exports.AttributeCopyOperations = {
+  COPYTUPLE: 0,
+  INTERPOLATE: 1,
+  PASSDATA: 2,
+  ALLCOPY: 3 // all of the above
+};
+
+var ghostArrayName = exports.ghostArrayName = 'vtkGhostType';
+
+var DesiredOutputPrecision = exports.DesiredOutputPrecision = {
+  DEFAULT: 0, // use the point type that does not truncate any data
+  SINGLE: 1, // use Float32Array
+  DOUBLE: 2 // use Float64Array
+};
+
+exports.default = {
+  AttributeCopyOperations: AttributeCopyOperations,
+  AttributeLimitTypes: AttributeLimitTypes,
+  AttributeTypes: AttributeTypes,
+  CellGhostTypes: CellGhostTypes,
+  DesiredOutputPrecision: DesiredOutputPrecision,
+  PointGhostTypes: PointGhostTypes,
+  ghostArrayName: ghostArrayName
+};
+
+/***/ }),
+/* 33 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9424,7 +10137,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 32 */
+/* 34 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9440,7 +10153,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _Constants = __webpack_require__(25);
+var _Constants = __webpack_require__(27);
 
 var _Constants2 = _interopRequireDefault(_Constants);
 
@@ -9602,7 +10315,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend);
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, STATIC, _Constants2.default);
 
 /***/ }),
-/* 33 */
+/* 35 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9632,7 +10345,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 34 */
+/* 36 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -9650,15 +10363,15 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _HardwareSelector = __webpack_require__(197);
+var _HardwareSelector = __webpack_require__(201);
 
 var _HardwareSelector2 = _interopRequireDefault(_HardwareSelector);
 
-var _Helper = __webpack_require__(58);
+var _Helper = __webpack_require__(59);
 
 var _Helper2 = _interopRequireDefault(_Helper);
 
-var _Mapper = __webpack_require__(35);
+var _Mapper = __webpack_require__(37);
 
 var _Mapper2 = _interopRequireDefault(_Mapper);
 
@@ -9666,11 +10379,11 @@ var _Math = __webpack_require__(1);
 
 var _Math2 = _interopRequireDefault(_Math);
 
-var _Texture = __webpack_require__(24);
+var _Texture = __webpack_require__(26);
 
 var _Texture2 = _interopRequireDefault(_Texture);
 
-var _Property = __webpack_require__(57);
+var _Property = __webpack_require__(58);
 
 var _Property2 = _interopRequireDefault(_Property);
 
@@ -9686,7 +10399,7 @@ var _vtkPolyDataVS = __webpack_require__(105);
 
 var _vtkPolyDataVS2 = _interopRequireDefault(_vtkPolyDataVS);
 
-var _vtkPolyDataFS = __webpack_require__(36);
+var _vtkPolyDataFS = __webpack_require__(38);
 
 var _vtkPolyDataFS2 = _interopRequireDefault(_vtkPolyDataFS);
 
@@ -9743,6 +10456,7 @@ function vtkOpenGLPolyDataMapper(publicAPI, model) {
 
   publicAPI.opaqueZBufferPass = function (prepass) {
     if (prepass) {
+      model.haveSeenDepthRequest = true;
       model.renderDepth = true;
       publicAPI.render();
       model.renderDepth = false;
@@ -10015,7 +10729,7 @@ function vtkOpenGLPolyDataMapper(publicAPI, model) {
 
     // for points make sure to add in the point size
     if (actor.getProperty().getRepresentation() === Representation.POINTS || model.lastBoundBO.getPrimitiveType() === primTypes.Points) {
-      VSSource = _ShaderProgram2.default.substitute(VSSource, '//VTK::PositionVC::Impl', ['//VTK::PositionVC::Impl', '  gl_PointSize = ' + actor.getProperty().getPointSize().toFixed(1) + ';'], false).result;
+      VSSource = _ShaderProgram2.default.substitute(VSSource, '//VTK::PositionVC::Impl', ['//VTK::PositionVC::Impl', '  gl_PointSize = ' + actor.getProperty().getPointSize() + '.0;'], false).result;
     }
 
     // do we need the vertex in the shader in View Coordinates
@@ -10212,9 +10926,10 @@ function vtkOpenGLPolyDataMapper(publicAPI, model) {
     publicAPI.replaceShaderCoincidentOffset(shaders, ren, actor);
     publicAPI.replaceShaderPositionVC(shaders, ren, actor);
 
-    if (model.renderDepth) {
+    if (model.haveSeenDepthRequest) {
       var FSSource = shaders.Fragment;
-      FSSource = _ShaderProgram2.default.substitute(FSSource, '//VTK::ZBuffer::Impl', ['float iz = floor(gl_FragCoord.z*65535.0 + 0.1);', 'float rf = floor(iz/256.0)/255.0;', 'float gf = mod(iz,256.0)/255.0;', 'gl_FragData[0] = vec4(rf, gf, 0.0, 1.0);']).result;
+      FSSource = _ShaderProgram2.default.substitute(FSSource, '//VTK::ZBuffer::Dec', 'uniform int depthRequest;').result;
+      FSSource = _ShaderProgram2.default.substitute(FSSource, '//VTK::ZBuffer::Impl', ['if (depthRequest == 1) {', 'float iz = floor(gl_FragCoord.z*65535.0 + 0.1);', 'float rf = floor(iz/256.0)/255.0;', 'float gf = mod(iz,256.0)/255.0;', 'gl_FragData[0] = vec4(rf, gf, 0.0, 1.0); }']).result;
       shaders.Fragment = FSSource;
     }
   };
@@ -10281,15 +10996,13 @@ function vtkOpenGLPolyDataMapper(publicAPI, model) {
       needRebuild = true;
     }
 
-    var toString = '' + model.renderDepth;
-
     // has something changed that would require us to recreate the shader?
     // candidates are
     // property modified (representation interpolation and lighting)
     // input modified
     // light complexity changed
-    if (model.shaderRebuildString !== toString || cellBO.getProgram() === 0 || cellBO.getShaderSourceTime().getMTime() < publicAPI.getMTime() || cellBO.getShaderSourceTime().getMTime() < actor.getMTime() || cellBO.getShaderSourceTime().getMTime() < model.renderable.getMTime() || cellBO.getShaderSourceTime().getMTime() < model.currentInput.getMTime() || needRebuild) {
-      model.shaderRebuildString = toString;
+    if (model.lastHaveSeenDepthRequest !== model.haveSeenDepthRequest || cellBO.getProgram() === 0 || cellBO.getShaderSourceTime().getMTime() < publicAPI.getMTime() || cellBO.getShaderSourceTime().getMTime() < actor.getMTime() || cellBO.getShaderSourceTime().getMTime() < model.renderable.getMTime() || cellBO.getShaderSourceTime().getMTime() < model.currentInput.getMTime() || needRebuild) {
+      model.lastHaveSeenDepthRequest = model.haveSeenDepthRequest;
       return true;
     }
 
@@ -10408,6 +11121,11 @@ function vtkOpenGLPolyDataMapper(publicAPI, model) {
       }
     }
 
+    // handle depth requests
+    if (model.haveSeenDepthRequest) {
+      cellBO.getProgram().setUniformi('depthRequest', model.renderDepth ? 1 : 0);
+    }
+
     // handle coincident
     if (cellBO.getProgram().isUniformUsed('coffset')) {
       var cp = publicAPI.getCoincidentParameters(ren, actor);
@@ -10471,7 +11189,7 @@ function vtkOpenGLPolyDataMapper(publicAPI, model) {
 
     // for lightkit case there are some parameters to set
     var cam = ren.getActiveCamera();
-    var viewTF = cam.getViewTransformMatrix();
+    var viewTF = cam.getViewMatrix();
     _glMatrix.mat4.transpose(viewTF, viewTF);
 
     numberOfLights = 0;
@@ -10501,7 +11219,7 @@ function vtkOpenGLPolyDataMapper(publicAPI, model) {
     var keyMats = model.openGLCamera.getKeyMatrices(ren);
     var cam = ren.getActiveCamera();
 
-    var camm = cam.getMTime();
+    var camm = model.openGLCamera.getKeyMatrixTime().getMTime();
     var progm = program.getLastCameraMTime();
 
     if (progm !== camm) {
@@ -10642,7 +11360,7 @@ function vtkOpenGLPolyDataMapper(publicAPI, model) {
         var mode = publicAPI.getOpenGLMode(representation, i);
         gl.drawArrays(mode, 0, cabo.getElementCount());
 
-        var stride = mode === gl.POINTS ? 1 : mode === gl.LINES ? 2 : 3;
+        var stride = (mode === gl.POINTS ? 1 : 0) || (mode === gl.LINES ? 2 : 3);
         model.primitiveIDOffset += cabo.getElementCount() / stride;
       }
     }
@@ -10672,7 +11390,6 @@ function vtkOpenGLPolyDataMapper(publicAPI, model) {
     // if (ren.getRenderWindow().checkAbortStatus()) {
     //   return;
     // }
-
 
     publicAPI.invokeEvent(StartEvent);
     if (!model.renderable.getStatic()) {
@@ -10866,7 +11583,9 @@ var DEFAULT_VALUES = {
   specularColor: [], // used internally
   lightColor: [], // used internally
   lightHalfAngle: [], // used internally
-  lightDirection: [] // used internally
+  lightDirection: [], // used internally
+  lastHaveSeenDepthRequest: false,
+  haveSeenDepthRequest: false
 };
 
 // ----------------------------------------------------------------------------
@@ -10909,7 +11628,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 35 */
+/* 37 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -10925,19 +11644,19 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _AbstractMapper3D = __webpack_require__(203);
+var _AbstractMapper3D = __webpack_require__(207);
 
 var _AbstractMapper3D2 = _interopRequireDefault(_AbstractMapper3D);
 
-var _DataArray = __webpack_require__(5);
+var _DataArray = __webpack_require__(4);
 
 var _DataArray2 = _interopRequireDefault(_DataArray);
 
-var _ImageData = __webpack_require__(50);
+var _ImageData = __webpack_require__(52);
 
 var _ImageData2 = _interopRequireDefault(_ImageData);
 
-var _LookupTable = __webpack_require__(205);
+var _LookupTable = __webpack_require__(209);
 
 var _LookupTable2 = _interopRequireDefault(_LookupTable);
 
@@ -10945,15 +11664,15 @@ var _Math = __webpack_require__(1);
 
 var _Math2 = _interopRequireDefault(_Math);
 
-var _Constants = __webpack_require__(55);
+var _Constants = __webpack_require__(56);
 
 var _Constants2 = _interopRequireDefault(_Constants);
 
-var _CoincidentTopologyHelper = __webpack_require__(206);
+var _CoincidentTopologyHelper = __webpack_require__(210);
 
 var _CoincidentTopologyHelper2 = _interopRequireDefault(_CoincidentTopologyHelper);
 
-var _Static = __webpack_require__(207);
+var _Static = __webpack_require__(211);
 
 var _Static2 = _interopRequireDefault(_Static);
 
@@ -10988,7 +11707,10 @@ var staticOffsetModel = {
 var staticOffsetAPI = {};
 
 _CoincidentTopologyHelper2.default.addCoincidentTopologyMethods(staticOffsetAPI, staticOffsetModel, _CoincidentTopologyHelper2.default.CATEGORIES.map(function (key) {
-  return { key: key, method: 'ResolveCoincidentTopology' + key + 'OffsetParameters' };
+  return {
+    key: key,
+    method: 'ResolveCoincidentTopology' + key + 'OffsetParameters'
+  };
 }));
 
 // ----------------------------------------------------------------------------
@@ -11074,7 +11796,10 @@ function vtkMapper(publicAPI, model) {
     Point: { factor: 0, offset: 0 }
   };
   _CoincidentTopologyHelper2.default.addCoincidentTopologyMethods(publicAPI, model.topologyOffset, _CoincidentTopologyHelper2.default.CATEGORIES.map(function (key) {
-    return { key: key, method: 'RelativeCoincidentTopology' + key + 'OffsetParameters' };
+    return {
+      key: key,
+      method: 'RelativeCoincidentTopology' + key + 'OffsetParameters'
+    };
   }));
   /* eslint-enable arrow-body-style */
 
@@ -11315,7 +12040,10 @@ function vtkMapper(publicAPI, model) {
       model.colorTextureMap = _ImageData2.default.newInstance();
       model.colorTextureMap.setExtent(0, numberOfColors - 1, 0, 1, 0, 0);
 
-      var tmp = _DataArray2.default.newInstance({ numberOfComponents: 1, values: newArray });
+      var tmp = _DataArray2.default.newInstance({
+        numberOfComponents: 1,
+        values: newArray
+      });
 
       model.colorTextureMap.getPointData().setScalars(model.lookupTable.mapScalars(tmp, model.colorMode, 0));
       model.lookupTable.setAlpha(origAlpha);
@@ -11332,7 +12060,10 @@ function vtkMapper(publicAPI, model) {
       var num = scalars.getNumberOfTuples();
 
       // const fArray = new FloatArray(num * 2);
-      model.colorCoordinates = _DataArray2.default.newInstance({ numberOfComponents: 2, values: new Float32Array(num * 2) });
+      model.colorCoordinates = _DataArray2.default.newInstance({
+        numberOfComponents: 2,
+        values: new Float32Array(num * 2)
+      });
 
       var scalarComponent = model.lookupTable.getVectorComponent();
       // Although I like the feature of applying magnitude to single component
@@ -11429,7 +12160,6 @@ var DEFAULT_VALUES = {
   renderTime: 0,
 
   colorByArrayName: null,
-  colorByArrayComponent: -1,
 
   fieldDataTupleId: -1,
 
@@ -11457,7 +12187,7 @@ function extend(publicAPI, model) {
   _AbstractMapper3D2.default.extend(publicAPI, model, initialValues);
 
   _macro2.default.get(publicAPI, model, ['colorCoordinates', 'colorMapColors', 'colorTextureMap']);
-  _macro2.default.setGet(publicAPI, model, ['colorByArrayComponent', 'colorByArrayName', 'arrayAccessMode', 'colorMode', 'fieldDataTupleId', 'interpolateScalarsBeforeMapping', 'lookupTable', 'renderTime', 'resolveCoincidentTopology', 'scalarMode', 'scalarVisibility', 'static', 'useLookupTableScalarRange', 'viewSpecificProperties']);
+  _macro2.default.setGet(publicAPI, model, ['colorByArrayName', 'arrayAccessMode', 'colorMode', 'fieldDataTupleId', 'interpolateScalarsBeforeMapping', 'lookupTable', 'renderTime', 'resolveCoincidentTopology', 'scalarMode', 'scalarVisibility', 'static', 'useLookupTableScalarRange', 'viewSpecificProperties']);
   _macro2.default.setGetArray(publicAPI, model, ['scalarRange'], 2);
 
   if (!model.viewSpecificProperties) {
@@ -11477,113 +12207,153 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, staticOffsetAPI, _Static2.default, _Constants4.default);
 
 /***/ }),
-/* 36 */
+/* 38 */
 /***/ (function(module, exports) {
 
-module.exports = "//VTK::System::Dec\n\n/*=========================================================================\n\n  Program:   Visualization Toolkit\n  Module:    vtkPolyDataFS.glsl\n\n  Copyright (c) Ken Martin, Will Schroeder, Bill Lorensen\n  All rights reserved.\n  See Copyright.txt or http://www.kitware.com/Copyright.htm for details.\n\n     This software is distributed WITHOUT ANY WARRANTY; without even\n     the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR\n     PURPOSE.  See the above copyright notice for more information.\n\n=========================================================================*/\n// Template for the polydata mappers fragment shader\n\nuniform int PrimitiveIDOffset;\n\n// VC position of this fragment\n//VTK::PositionVC::Dec\n\n// optional color passed in from the vertex shader, vertexColor\n//VTK::Color::Dec\n\n// optional surface normal declaration\n//VTK::Normal::Dec\n\n// extra lighting parameters\n//VTK::Light::Dec\n\n// Texture coordinates\n//VTK::TCoord::Dec\n\n// picking support\n//VTK::Picking::Dec\n\n// Depth Peeling Support\n//VTK::DepthPeeling::Dec\n\n// clipping plane vars\n//VTK::Clip::Dec\n\n// the output of this shader\n//VTK::Output::Dec\n\n// Apple Bug\n//VTK::PrimID::Dec\n\n// handle coincident offsets\n//VTK::Coincident::Dec\n\nvoid main()\n{\n  // VC position of this fragment. This should not branch/return/discard.\n  //VTK::PositionVC::Impl\n\n  // Place any calls that require uniform flow (e.g. dFdx) here.\n  //VTK::UniformFlow::Impl\n\n  // Set gl_FragDepth here (gl_FragCoord.z by default)\n  //VTK::Depth::Impl\n\n  // Early depth peeling abort:\n  //VTK::DepthPeeling::PreColor\n\n  // Apple Bug\n  //VTK::PrimID::Impl\n\n  //VTK::Clip::Impl\n\n  //VTK::Color::Impl\n\n  // Generate the normal if we are not passed in one\n  //VTK::Normal::Impl\n\n  //VTK::Light::Impl\n\n  //VTK::TCoord::Impl\n\n  if (gl_FragData[0].a <= 0.0)\n    {\n    discard;\n    }\n\n  //VTK::DepthPeeling::Impl\n\n  //VTK::Picking::Impl\n\n  // handle coincident offsets\n  //VTK::Coincident::Impl\n\n  //VTK::ZBuffer::Impl\n}\n"
+module.exports = "//VTK::System::Dec\n\n/*=========================================================================\n\n  Program:   Visualization Toolkit\n  Module:    vtkPolyDataFS.glsl\n\n  Copyright (c) Ken Martin, Will Schroeder, Bill Lorensen\n  All rights reserved.\n  See Copyright.txt or http://www.kitware.com/Copyright.htm for details.\n\n     This software is distributed WITHOUT ANY WARRANTY; without even\n     the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR\n     PURPOSE.  See the above copyright notice for more information.\n\n=========================================================================*/\n// Template for the polydata mappers fragment shader\n\nuniform int PrimitiveIDOffset;\n\n// VC position of this fragment\n//VTK::PositionVC::Dec\n\n// optional color passed in from the vertex shader, vertexColor\n//VTK::Color::Dec\n\n// optional surface normal declaration\n//VTK::Normal::Dec\n\n// extra lighting parameters\n//VTK::Light::Dec\n\n// Texture coordinates\n//VTK::TCoord::Dec\n\n// picking support\n//VTK::Picking::Dec\n\n// Depth Peeling Support\n//VTK::DepthPeeling::Dec\n\n// clipping plane vars\n//VTK::Clip::Dec\n\n// the output of this shader\n//VTK::Output::Dec\n\n// Apple Bug\n//VTK::PrimID::Dec\n\n// handle coincident offsets\n//VTK::Coincident::Dec\n\n//VTK::ZBuffer::Dec\n\nvoid main()\n{\n  // VC position of this fragment. This should not branch/return/discard.\n  //VTK::PositionVC::Impl\n\n  // Place any calls that require uniform flow (e.g. dFdx) here.\n  //VTK::UniformFlow::Impl\n\n  // Set gl_FragDepth here (gl_FragCoord.z by default)\n  //VTK::Depth::Impl\n\n  // Early depth peeling abort:\n  //VTK::DepthPeeling::PreColor\n\n  // Apple Bug\n  //VTK::PrimID::Impl\n\n  //VTK::Clip::Impl\n\n  //VTK::Color::Impl\n\n  // Generate the normal if we are not passed in one\n  //VTK::Normal::Impl\n\n  //VTK::Light::Impl\n\n  //VTK::TCoord::Impl\n\n  if (gl_FragData[0].a <= 0.0)\n    {\n    discard;\n    }\n\n  //VTK::DepthPeeling::Impl\n\n  //VTK::Picking::Impl\n\n  // handle coincident offsets\n  //VTK::Coincident::Impl\n\n  //VTK::ZBuffer::Impl\n}\n"
 
 /***/ }),
-/* 37 */
-/***/ (function(module, exports, __webpack_require__) {
+/* 39 */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
+Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
+/* harmony export (immutable) */ __webpack_exports__["selectCompartment"] = selectCompartment;
+var container = document.getElementById('mytemplate');
+var camera, scene, renderer;
+var mouseX = 0, mouseY = 0;
+var windowHalfX = window.innerWidth / 2;
+var windowHalfY = window.innerHeight / 2;
+var objs = [];
+var obj_idx = [];
+var part_i = 0;
 
+init();
+animate();
 
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.newInstance = undefined;
-exports.extend = extend;
+setTimeout(function () { }, 2000);
 
-var _macro = __webpack_require__(0);
+function init() {
+    console.log("Init Template");
+    // get container to contain three.js canvas.
+    var container = document.getElementById('mytemplate');
 
-var _macro2 = _interopRequireDefault(_macro);
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 2000);
+    camera.position.z = 750;
 
-var _vtk = __webpack_require__(14);
+    // scene
+    scene = new THREE.Scene();
 
-var _vtk2 = _interopRequireDefault(_vtk);
+    var ambientLight = new THREE.AmbientLight(0xcccccc, 0.4);
+    scene.add(ambientLight);
 
-var _CellArray = __webpack_require__(233);
+    var pointLight = new THREE.PointLight(0xffffff, 0.8);
+    camera.add(pointLight);
+    scene.add(camera);
 
-var _CellArray2 = _interopRequireDefault(_CellArray);
-
-var _PointSet = __webpack_require__(234);
-
-var _PointSet2 = _interopRequireDefault(_PointSet);
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-var POLYDATA_FIELDS = ['verts', 'lines', 'polys', 'strips'];
-
-// ----------------------------------------------------------------------------
-// vtkPolyData methods
-// ----------------------------------------------------------------------------
-
-function vtkPolyData(publicAPI, model) {
-  // Set our className
-  model.classHierarchy.push('vtkPolyData');
-
-  function camelize(str) {
-    return str.replace(/(?:^\w|[A-Z]|\b\w)/g, function (letter, index) {
-      return index === 0 ? letter.toLowerCase() : letter.toUpperCase();
-    }).replace(/\s+/g, '');
-  }
-
-  // build empty cell arrays and set methods
-  POLYDATA_FIELDS.forEach(function (type) {
-    publicAPI['getNumberOf' + camelize(type)] = function () {
-      return model[type].getNumberOfCells();
+    // model
+    var manager = new THREE.LoadingManager();
+    manager.onProgress = function (item, loaded, total) {
+        console.log('Loaded ' + loaded + '/' + total + ' : ' + item);
+        var res = parseInt(item.match(/(\d+)(?=.obj)/gi));
+        obj_idx.push(res);
     };
-    if (!model[type]) {
-      model[type] = _CellArray2.default.newInstance();
-    } else {
-      model[type] = (0, _vtk2.default)(model[type]);
+
+    var loader = new THREE.OBJLoader(manager);
+
+    var onProgress = function (xhr) {
+        if (xhr.lengthComputable) {
+            var percentComplete = xhr.loaded / xhr.total * 100;
+            console.log(Math.round(percentComplete, 2) + '% downloaded');
+        }
+    };
+
+    var onError = function (xhr) {
+    };
+
+    var onLoad = function (object) {
+        object.traverse(function (child) {
+            if (child instanceof THREE.Mesh) {
+                child.material = new THREE.MeshPhongMaterial({ color: 0xffaa00 });
+            }
+        });
+        object.position.y = -145;
+        object.position.x = -256;
+        scene.add(object);
+        objs.push(object);
     }
-  });
 
-  publicAPI.getNumberOfCells = function () {
-    return POLYDATA_FIELDS.reduce(function (num, cellType) {
-      return num + model[cellType].getNumberOfCells();
-    }, 0);
-  };
+
+    for (let i = 1; i <= 10; i++) {
+        var objname = './data/template_parts/p' + i + '.obj';
+        loader.load(objname, onLoad, onProgress, onError);
+    }
+
+    // renderer
+    renderer = new THREE.WebGLRenderer();
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(container.offsetWidth, container.offsetHeight);
+    container.appendChild(renderer.domElement);
+
+    var controls = new THREE.OrbitControls(camera, container);
+    controls.enablePan = false;
+    controls.addEventListener('change', render);
+
+    window.addEventListener('resize', onWindowResize, false);
+
+    // container.addEventListener('mousedown', onDocumentMouseDown, false);
 }
 
-// ----------------------------------------------------------------------------
-// Object factory
-// ----------------------------------------------------------------------------
-
-var DEFAULT_VALUES = {
-  // verts: null,
-  // lines: null,
-  // polys: null,
-  // strips: null,
-};
-
-// ----------------------------------------------------------------------------
-
-function extend(publicAPI, model) {
-  var initialValues = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
-
-  Object.assign(model, DEFAULT_VALUES, initialValues);
-
-  // Inheritance
-  _PointSet2.default.extend(publicAPI, model, initialValues);
-  _macro2.default.setGet(publicAPI, model, ['verts', 'lines', 'polys', 'strips']);
-
-  // Object specific methods
-  vtkPolyData(publicAPI, model);
+function selectCompartment(part_i) {
+    var random_col = Math.floor(Math.random() * 16777215);
+    for (let i = 0; i < objs.length; i++) {
+        objs[i].traverse(function (child) {
+            if (child instanceof THREE.Mesh) {
+                if (part_i == obj_idx[i]) {
+                    child.material.color.setHex("0x4444ff");
+                } else {
+                    child.material.color.setHex("0xffaa00");
+                }
+            }
+        });
+    }
 }
 
-// ----------------------------------------------------------------------------
+// function onDocumentMouseDown(event) {
+//     // var random_col = Math.floor(Math.random() * 16777215);
+//     // str = objs[part_i].materialLibraries[0];
+//     // objs[part_i].traverse(function (child) {
+//     //     if (child instanceof THREE.Mesh) {
+//     //         child.material.color.setHex(random_col);
+//     //         console.log('Compartment ' + obj_idx[part_i] + ' : color = 0x' + child.material.color.getHexString());
+//     //     }
+//     // });
+//     selectCompartment(part_i+1)
+//     part_i = ++part_i % objs.length;
+// }
 
-var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtkPolyData');
+function onWindowResize() {
+    windowHalfX = container.offsetWidth / 2;
+    windowHalfY = container.offsetHeight / 2;
 
-// ----------------------------------------------------------------------------
+    camera.aspect = container.offsetWidth / container.offsetHeight;
+    camera.updateProjectionMatrix();
 
-exports.default = { newInstance: newInstance, extend: extend };
+    renderer.setSize(container.offsetWidth, container.offsetHeight);
+}
+
+//
+function animate() {
+    requestAnimationFrame(animate);
+    render();
+}
+
+function render() {
+    renderer.render(scene, camera);
+}
 
 /***/ }),
-/* 38 */
+/* 40 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -11593,7 +12363,7 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 
-var _pako = __webpack_require__(21);
+var _pako = __webpack_require__(23);
 
 var _pako2 = _interopRequireDefault(_pako);
 
@@ -11601,7 +12371,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _Endian = __webpack_require__(40);
+var _Endian = __webpack_require__(42);
 
 var _Endian2 = _interopRequireDefault(_Endian);
 
@@ -11612,6 +12382,7 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
 var vtkErrorMacro = _macro2.default.vtkErrorMacro,
     vtkDebugMacro = _macro2.default.vtkDebugMacro;
 
+/* eslint-disable prefer-promise-reject-errors */
 
 var requestCount = 0;
 
@@ -11626,7 +12397,7 @@ function fetchBinary(url) {
         if (xhr.status === 200 || xhr.status === 0) {
           resolve(xhr.response);
         } else {
-          reject(xhr, e);
+          reject({ xhr: xhr, e: e });
         }
       }
     };
@@ -11667,7 +12438,9 @@ function fetchArray() {
 
             if (options.compression) {
               if (array.dataType === 'string' || array.dataType === 'JSON') {
-                array.buffer = _pako2.default.inflate(new Uint8Array(array.buffer), { to: 'string' });
+                array.buffer = _pako2.default.inflate(new Uint8Array(array.buffer), {
+                  to: 'string'
+                });
               } else {
                 array.buffer = _pako2.default.inflate(new Uint8Array(array.buffer)).buffer;
               }
@@ -11699,7 +12472,7 @@ function fetchArray() {
             }
             resolve(array);
           } else {
-            reject(xhr, e);
+            reject({ xhr: xhr, e: e });
           }
         }
       };
@@ -11715,9 +12488,7 @@ function fetchArray() {
     });
   }
 
-  return new Promise(function (resolve, reject) {
-    resolve(array);
-  });
+  return Promise.resolve(array);
 }
 
 // ----------------------------------------------------------------------------
@@ -11747,7 +12518,7 @@ function fetchJSON() {
             resolve(JSON.parse(xhr.responseText));
           }
         } else {
-          reject(xhr, e);
+          reject({ xhr: xhr, e: e });
         }
       }
     };
@@ -11795,7 +12566,7 @@ function fetchText() {
             resolve(xhr.responseText);
           }
         } else {
-          reject(xhr, e);
+          reject({ xhr: xhr, e: e });
         }
       }
     };
@@ -11820,8 +12591,10 @@ exports.default = {
   fetchBinary: fetchBinary // Only for HTTP
 };
 
+/* eslint-enable prefer-promise-reject-errors */
+
 /***/ }),
-/* 39 */
+/* 41 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -11841,7 +12614,7 @@ module.exports = {
 
 
 /***/ }),
-/* 40 */
+/* 42 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -11893,7 +12666,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 41 */
+/* 43 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -12014,7 +12787,7 @@ function fromByteArray (uint8) {
 
 
 /***/ }),
-/* 42 */
+/* 44 */
 /***/ (function(module, exports) {
 
 // Copyright Joyent, Inc. and other Node contributors.
@@ -12322,20 +13095,20 @@ function isUndefined(arg) {
 
 
 /***/ }),
-/* 43 */
+/* 45 */
 /***/ (function(module, exports, __webpack_require__) {
 
 exports = module.exports = __webpack_require__(73);
 exports.Stream = exports;
 exports.Readable = exports;
-exports.Writable = __webpack_require__(45);
+exports.Writable = __webpack_require__(47);
 exports.Duplex = __webpack_require__(15);
 exports.Transform = __webpack_require__(78);
-exports.PassThrough = __webpack_require__(138);
+exports.PassThrough = __webpack_require__(141);
 
 
 /***/ }),
-/* 44 */
+/* 46 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* eslint-disable node/no-deprecated-api */
@@ -12403,7 +13176,7 @@ SafeBuffer.allocUnsafeSlow = function (size) {
 
 
 /***/ }),
-/* 45 */
+/* 47 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -12436,7 +13209,7 @@ SafeBuffer.allocUnsafeSlow = function (size) {
 
 /*<replacement>*/
 
-var processNextTick = __webpack_require__(28);
+var processNextTick = __webpack_require__(29);
 /*</replacement>*/
 
 module.exports = Writable;
@@ -12473,13 +13246,13 @@ var Duplex;
 Writable.WritableState = WritableState;
 
 /*<replacement>*/
-var util = __webpack_require__(22);
+var util = __webpack_require__(24);
 util.inherits = __webpack_require__(18);
 /*</replacement>*/
 
 /*<replacement>*/
 var internalUtil = {
-  deprecate: __webpack_require__(137)
+  deprecate: __webpack_require__(140)
 };
 /*</replacement>*/
 
@@ -12488,7 +13261,7 @@ var Stream = __webpack_require__(74);
 /*</replacement>*/
 
 /*<replacement>*/
-var Buffer = __webpack_require__(44).Buffer;
+var Buffer = __webpack_require__(46).Buffer;
 var OurUint8Array = global.Uint8Array || function () {};
 function _uint8ArrayToBuffer(chunk) {
   return Buffer.from(chunk);
@@ -13071,10 +13844,10 @@ Writable.prototype._destroy = function (err, cb) {
   this.end();
   cb(err);
 };
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(27), __webpack_require__(76).setImmediate, __webpack_require__(4)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(28), __webpack_require__(76).setImmediate, __webpack_require__(5)))
 
 /***/ }),
-/* 46 */
+/* 48 */
 /***/ (function(module, exports) {
 
 module.exports = function (it) {
@@ -13083,7 +13856,7 @@ module.exports = function (it) {
 
 
 /***/ }),
-/* 47 */
+/* 49 */
 /***/ (function(module, exports, __webpack_require__) {
 
 // Thank's IE8 for his funny defineProperty
@@ -13093,13 +13866,13 @@ module.exports = !__webpack_require__(82)(function () {
 
 
 /***/ }),
-/* 48 */
+/* 50 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 
-var external = __webpack_require__(23);
+var external = __webpack_require__(25);
 var DataWorker = __webpack_require__(86);
 var DataLengthProbe = __webpack_require__(87);
 var Crc32Probe = __webpack_require__(88);
@@ -13175,7 +13948,7 @@ module.exports = CompressedObject;
 
 
 /***/ }),
-/* 49 */
+/* 51 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -13259,7 +14032,7 @@ module.exports = function crc32wrapper(input, crc) {
 
 
 /***/ }),
-/* 50 */
+/* 52 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -13275,11 +14048,11 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _DataSet = __webpack_require__(51);
+var _DataSet = __webpack_require__(53);
 
 var _DataSet2 = _interopRequireDefault(_DataSet);
 
-var _StructuredData = __webpack_require__(173);
+var _StructuredData = __webpack_require__(186);
 
 var _StructuredData2 = _interopRequireDefault(_StructuredData);
 
@@ -13331,9 +14104,9 @@ function vtkImageData(publicAPI, model) {
   };
 
   publicAPI.setDimensions = function () {
-    var i;
-    var j;
-    var k;
+    var i = void 0;
+    var j = void 0;
+    var k = void 0;
 
     if (model.deleted) {
       vtkErrorMacro('instance deleted - cannot call any method');
@@ -13475,6 +14248,7 @@ function vtkImageData(publicAPI, model) {
   };
 
   publicAPI.extentToBounds = function (ex) {
+    // prettier-ignore
     var corners = [ex[0], ex[2], ex[4], ex[1], ex[2], ex[4], ex[0], ex[3], ex[4], ex[1], ex[3], ex[4], ex[0], ex[2], ex[5], ex[1], ex[2], ex[5], ex[0], ex[3], ex[5], ex[1], ex[3], ex[5]];
 
     var idx = _glMatrix.vec3.fromValues(corners[0], corners[1], corners[2]);
@@ -13647,7 +14421,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 51 */
+/* 53 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -13667,11 +14441,11 @@ var _vtk = __webpack_require__(14);
 
 var _vtk2 = _interopRequireDefault(_vtk);
 
-var _DataSetAttributes = __webpack_require__(171);
+var _DataSetAttributes = __webpack_require__(184);
 
 var _DataSetAttributes2 = _interopRequireDefault(_DataSetAttributes);
 
-var _Constants = __webpack_require__(53);
+var _Constants = __webpack_require__(54);
 
 var _Constants2 = _interopRequireDefault(_Constants);
 
@@ -13766,67 +14540,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, _Constants2.default);
 
 /***/ }),
-/* 52 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-var AttributeTypes = exports.AttributeTypes = {
-  SCALARS: 0,
-  VECTORS: 1,
-  NORMALS: 2,
-  TCOORDS: 3,
-  TENSORS: 4,
-  GLOBALIDS: 5,
-  PEDIGREEIDS: 6,
-  EDGEFLAG: 7,
-  NUM_ATTRIBUTES: 8
-};
-
-var AttributeLimitTypes = exports.AttributeLimitTypes = {
-  MAX: 0,
-  EXACT: 1,
-  NOLIMIT: 2
-};
-
-var CellGhostTypes = exports.CellGhostTypes = {
-  DUPLICATECELL: 1, // the cell is present on multiple processors
-  HIGHCONNECTIVITYCELL: 2, // the cell has more neighbors than in a regular mesh
-  LOWCONNECTIVITYCELL: 4, // the cell has less neighbors than in a regular mesh
-  REFINEDCELL: 8, // other cells are present that refines it.
-  EXTERIORCELL: 16, // the cell is on the exterior of the data set
-  HIDDENCELL: 32 // the cell is needed to maintain connectivity, but the data values should be ignored.
-};
-
-var PointGhostTypes = exports.PointGhostTypes = {
-  DUPLICATEPOINT: 1, // the cell is present on multiple processors
-  HIDDENPOINT: 2 // the point is needed to maintain connectivity, but the data values should be ignored.
-};
-
-var AttributeCopyOperations = exports.AttributeCopyOperations = {
-  COPYTUPLE: 0,
-  INTERPOLATE: 1,
-  PASSDATA: 2,
-  ALLCOPY: 3 //all of the above
-};
-
-var ghostArrayName = exports.ghostArrayName = 'vtkGhostType';
-
-exports.default = {
-  AttributeTypes: AttributeTypes,
-  AttributeLimitTypes: AttributeLimitTypes,
-  CellGhostTypes: CellGhostTypes,
-  PointGhostTypes: PointGhostTypes,
-  ghostArrayName: ghostArrayName,
-  AttributeCopyOperations: AttributeCopyOperations
-};
-
-/***/ }),
-/* 53 */
+/* 54 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -13876,7 +14590,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 54 */
+/* 55 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -13900,7 +14614,7 @@ var _ScalarsToColors = __webpack_require__(99);
 
 var _ScalarsToColors2 = _interopRequireDefault(_ScalarsToColors);
 
-var _Constants = __webpack_require__(188);
+var _Constants = __webpack_require__(192);
 
 var _Constants2 = _interopRequireDefault(_Constants);
 
@@ -15072,7 +15786,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, _Constants2.default);
 
 /***/ }),
-/* 55 */
+/* 56 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -15100,7 +15814,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 56 */
+/* 57 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -15116,13 +15830,13 @@ var _macro = __webpack_require__(0);
 
 var macro = _interopRequireWildcard(_macro);
 
-var _Texture = __webpack_require__(24);
+var _Texture = __webpack_require__(26);
 
 var _Texture2 = _interopRequireDefault(_Texture);
 
 var _Constants = __webpack_require__(9);
 
-var _Constants2 = __webpack_require__(31);
+var _Constants2 = __webpack_require__(33);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -15289,7 +16003,7 @@ var newInstance = exports.newInstance = macro.newInstance(extend, 'vtkFramebuffe
 exports.default = Object.assign({ newInstance: newInstance, extend: extend });
 
 /***/ }),
-/* 57 */
+/* 58 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -15305,7 +16019,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _Constants = __webpack_require__(33);
+var _Constants = __webpack_require__(35);
 
 var _Constants2 = _interopRequireDefault(_Constants);
 
@@ -15441,7 +16155,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, _Constants2.default);
 
 /***/ }),
-/* 58 */
+/* 59 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -15457,7 +16171,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _CellArrayBufferObject = __webpack_require__(201);
+var _CellArrayBufferObject = __webpack_require__(205);
 
 var _CellArrayBufferObject2 = _interopRequireDefault(_CellArrayBufferObject);
 
@@ -15540,7 +16254,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend);
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 59 */
+/* 60 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -15549,7 +16263,7 @@ exports.default = { newInstance: newInstance, extend: extend };
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.newInstance = exports.STATIC = exports.INIT_BOUNDS = undefined;
+exports.newInstance = exports.STATIC = undefined;
 
 var _slicedToArray = function () { function sliceIterator(arr, i) { var _arr = []; var _n = true; var _d = false; var _e = undefined; try { for (var _i = arr[Symbol.iterator](), _s; !(_n = (_s = _i.next()).done); _n = true) { _arr.push(_s.value); if (i && _arr.length === i) break; } } catch (err) { _d = true; _e = err; } finally { try { if (!_n && _i["return"]) _i["return"](); } finally { if (_d) throw _e; } } return _arr; } return function (arr, i) { if (Array.isArray(arr)) { return arr; } else if (Symbol.iterator in Object(arr)) { return sliceIterator(arr, i); } else { throw new TypeError("Invalid attempt to destructure non-iterable instance"); } }; }();
 
@@ -15567,7 +16281,7 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
 
 function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } else { return Array.from(arr); } }
 
-var INIT_BOUNDS = exports.INIT_BOUNDS = [Number.MAX_VALUE, -Number.MAX_VALUE, // X
+var INIT_BOUNDS = [Number.MAX_VALUE, -Number.MAX_VALUE, // X
 Number.MAX_VALUE, -Number.MAX_VALUE, // Y
 Number.MAX_VALUE, -Number.MAX_VALUE];
 
@@ -15628,6 +16342,18 @@ function oppositeSign(a, b) {
   return a <= 0 && b >= 0 || a >= 0 && b <= 0;
 }
 
+function getCorners(bounds, corners) {
+  var count = 0;
+  for (var ix = 0; ix < 2; ix++) {
+    for (var iy = 2; iy < 4; iy++) {
+      for (var iz = 4; iz < 6; iz++) {
+        corners[count] = [bounds[ix], bounds[iy], bounds[iz]];
+        count++;
+      }
+    }
+  }
+}
+
 // ----------------------------------------------------------------------------
 // Static API
 // ----------------------------------------------------------------------------
@@ -15641,7 +16367,9 @@ var STATIC = exports.STATIC = {
   getDiagonalLength: getDiagonalLength,
   getXRange: getXRange,
   getYRange: getYRange,
-  getZRange: getZRange
+  getZRange: getZRange,
+  getCorners: getCorners,
+  INIT_BOUNDS: INIT_BOUNDS
 };
 
 // ----------------------------------------------------------------------------
@@ -15920,6 +16648,11 @@ function vtkBoundingBox(publicAPI, model) {
     });
   };
 
+  publicAPI.getCorners = function () {
+    getCorners(model.bounds, model.corners);
+    return model.corners;
+  };
+
   publicAPI.scale = function (sx, sy, sz) {
     if (publicAPI.isValid()) {
       var newBounds = [].concat(model.bounds);
@@ -15960,7 +16693,8 @@ function vtkBoundingBox(publicAPI, model) {
 
 var DEFAULT_VALUES = {
   type: 'vtkBoundingBox',
-  bounds: [].concat(INIT_BOUNDS)
+  bounds: [].concat(INIT_BOUNDS),
+  corners: []
 };
 
 // ----------------------------------------------------------------------------
@@ -15985,7 +16719,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, STATIC);
 
 /***/ }),
-/* 60 */
+/* 61 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -16007,7 +16741,7 @@ var _Prop3D = __webpack_require__(110);
 
 var _Prop3D2 = _interopRequireDefault(_Prop3D);
 
-var _Property = __webpack_require__(57);
+var _Property = __webpack_require__(58);
 
 var _Property2 = _interopRequireDefault(_Property);
 
@@ -16212,145 +16946,6 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 61 */
-/***/ (function(module, __webpack_exports__, __webpack_require__) {
-
-"use strict";
-Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
-/* harmony export (immutable) */ __webpack_exports__["selectCompartment"] = selectCompartment;
-var container = document.getElementById('mytemplate');
-var camera, scene, renderer;
-var mouseX = 0, mouseY = 0;
-var windowHalfX = window.innerWidth / 2;
-var windowHalfY = window.innerHeight / 2;
-var objs = [];
-var obj_idx = [];
-var part_i = 0;
-
-init();
-animate();
-
-setTimeout(function () { }, 2000);
-
-function init() {
-    console.log("Init Template");
-    // get container to contain three.js canvas.
-    var container = document.getElementById('mytemplate');
-
-    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 2000);
-    camera.position.z = 750;
-
-    // scene
-    scene = new THREE.Scene();
-
-    var ambientLight = new THREE.AmbientLight(0xcccccc, 0.4);
-    scene.add(ambientLight);
-
-    var pointLight = new THREE.PointLight(0xffffff, 0.8);
-    camera.add(pointLight);
-    scene.add(camera);
-
-    // model
-    var manager = new THREE.LoadingManager();
-    manager.onProgress = function (item, loaded, total) {
-        console.log('Loaded ' + loaded + '/' + total + ' : ' + item);
-        var res = parseInt(item.match(/(\d+)(?=.obj)/gi));
-        obj_idx.push(res);
-    };
-
-    var loader = new THREE.OBJLoader(manager);
-
-    var onProgress = function (xhr) {
-        if (xhr.lengthComputable) {
-            var percentComplete = xhr.loaded / xhr.total * 100;
-            console.log(Math.round(percentComplete, 2) + '% downloaded');
-        }
-    };
-
-    var onError = function (xhr) {
-    };
-
-    var onLoad = function (object) {
-        object.traverse(function (child) {
-            if (child instanceof THREE.Mesh) {
-                child.material = new THREE.MeshPhongMaterial({ color: 0xffaa00 });
-            }
-        });
-        object.position.y = -145;
-        object.position.x = -256;
-        scene.add(object);
-        objs.push(object);
-    }
-
-
-    for (let i = 1; i <= 10; i++) {
-        var objname = './data/template_parts/p' + i + '.obj';
-        loader.load(objname, onLoad, onProgress, onError);
-    }
-
-    // renderer
-    renderer = new THREE.WebGLRenderer();
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(container.offsetWidth, container.offsetHeight);
-    container.appendChild(renderer.domElement);
-
-    var controls = new THREE.OrbitControls(camera, container);
-    controls.addEventListener('change', render);
-
-    window.addEventListener('resize', onWindowResize, false);
-
-    // container.addEventListener('mousedown', onDocumentMouseDown, false);
-}
-
-function selectCompartment(part_i) {
-    var random_col = Math.floor(Math.random() * 16777215);
-    for (let i = 0; i < objs.length; i++) {
-        objs[i].traverse(function (child) {
-            if (child instanceof THREE.Mesh) {
-                if (part_i == obj_idx[i]) {
-                    child.material.color.setHex("0x4444ff");
-                } else {
-                    child.material.color.setHex("0xffaa00");
-                }
-            }
-        });
-    }
-}
-
-// function onDocumentMouseDown(event) {
-//     // var random_col = Math.floor(Math.random() * 16777215);
-//     // str = objs[part_i].materialLibraries[0];
-//     // objs[part_i].traverse(function (child) {
-//     //     if (child instanceof THREE.Mesh) {
-//     //         child.material.color.setHex(random_col);
-//     //         console.log('Compartment ' + obj_idx[part_i] + ' : color = 0x' + child.material.color.getHexString());
-//     //     }
-//     // });
-//     selectCompartment(part_i+1)
-//     part_i = ++part_i % objs.length;
-// }
-
-function onWindowResize() {
-    windowHalfX = container.offsetWidth / 2;
-    windowHalfY = container.offsetHeight / 2;
-
-    camera.aspect = container.offsetWidth / container.offsetHeight;
-    camera.updateProjectionMatrix();
-
-    renderer.setSize(container.offsetWidth, container.offsetHeight);
-}
-
-//
-function animate() {
-    requestAnimationFrame(animate);
-    render();
-}
-
-function render() {
-    renderer.render(scene, camera);
-}
-
-/***/ }),
 /* 62 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
@@ -16360,11 +16955,11 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 /* harmony export (immutable) */ __webpack_exports__["updateVolumeViewer"] = updateVolumeViewer;
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_vtk_js_Sources_favicon__ = __webpack_require__(63);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_vtk_js_Sources_favicon___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0_vtk_js_Sources_favicon__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_vtk_js_Sources_IO_Core_DataAccessHelper_HttpDataAccessHelper__ = __webpack_require__(38);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_vtk_js_Sources_IO_Core_DataAccessHelper_HttpDataAccessHelper__ = __webpack_require__(40);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_vtk_js_Sources_IO_Core_DataAccessHelper_HttpDataAccessHelper___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1_vtk_js_Sources_IO_Core_DataAccessHelper_HttpDataAccessHelper__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_vtk_js_Sources_IO_XML_XMLImageDataReader__ = __webpack_require__(69);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_vtk_js_Sources_IO_XML_XMLImageDataReader___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_2_vtk_js_Sources_IO_XML_XMLImageDataReader__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3_vtk_js_Sources_Rendering_Core_ColorTransferFunction__ = __webpack_require__(54);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3_vtk_js_Sources_Rendering_Core_ColorTransferFunction__ = __webpack_require__(55);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_3_vtk_js_Sources_Rendering_Core_ColorTransferFunction___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_3_vtk_js_Sources_Rendering_Core_ColorTransferFunction__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_4_vtk_js_Sources_Rendering_Misc_FullScreenRenderWindow__ = __webpack_require__(101);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_4_vtk_js_Sources_Rendering_Misc_FullScreenRenderWindow___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_4_vtk_js_Sources_Rendering_Misc_FullScreenRenderWindow__);
@@ -16372,11 +16967,11 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_5_vtk_js_Sources_IO_Core_HttpDataSetReader___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_5_vtk_js_Sources_IO_Core_HttpDataSetReader__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_6_vtk_js_Sources_Common_DataModel_PiecewiseFunction__ = __webpack_require__(112);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_6_vtk_js_Sources_Common_DataModel_PiecewiseFunction___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_6_vtk_js_Sources_Common_DataModel_PiecewiseFunction__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_7_vtk_js_Sources_Interaction_Widgets_PiecewiseGaussianWidget__ = __webpack_require__(237);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_7_vtk_js_Sources_Interaction_Widgets_PiecewiseGaussianWidget__ = __webpack_require__(242);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_7_vtk_js_Sources_Interaction_Widgets_PiecewiseGaussianWidget___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_7_vtk_js_Sources_Interaction_Widgets_PiecewiseGaussianWidget__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_8_vtk_js_Sources_Rendering_Core_Volume__ = __webpack_require__(238);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_8_vtk_js_Sources_Rendering_Core_Volume__ = __webpack_require__(243);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_8_vtk_js_Sources_Rendering_Core_Volume___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_8_vtk_js_Sources_Rendering_Core_Volume__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_9_vtk_js_Sources_Rendering_Core_VolumeMapper__ = __webpack_require__(240);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_9_vtk_js_Sources_Rendering_Core_VolumeMapper__ = __webpack_require__(245);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_9_vtk_js_Sources_Rendering_Core_VolumeMapper___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_9_vtk_js_Sources_Rendering_Core_VolumeMapper__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_10_vtk_js_Sources_Rendering_Core_ColorTransferFunction_ColorMaps__ = __webpack_require__(113);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_10_vtk_js_Sources_Rendering_Core_ColorTransferFunction_ColorMaps___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_10_vtk_js_Sources_Rendering_Core_ColorTransferFunction_ColorMaps__);
@@ -16421,6 +17016,27 @@ function viewVolumeRender(urlToLoad, div_id) {
   widgetContainer.style.background = 'rgba(255, 255, 255, 0.3)';
   vtkcontainer.appendChild(widgetContainer);
 
+  const widgetXlabel = document.createElement('div');
+  widgetXlabel.classList.add("hasTooltip");
+  widgetXlabel.innerHTML = "Intensity";
+  widgetXlabel.style.position = "fixed";
+  widgetXlabel.style.top = 'calc(1em + 149px)';
+  widgetXlabel.style.color = "white";
+  widgetContainer.appendChild(widgetXlabel);
+
+  const widgetXlabeltooltip = document.createElement('div');
+  widgetXlabeltooltip.classList.add("hidden");
+  widgetXlabeltooltip.innerHTML = "Change opacity by adjusting the piecewise function of intensity";
+  widgetContainer.appendChild(widgetXlabeltooltip);
+
+  const widgetYlabel = document.createElement('div');
+  widgetYlabel.innerHTML = "Opacity";
+  widgetYlabel.style.position = "fixed";
+  widgetYlabel.style.transform = "rotate(90deg)";
+  widgetYlabel.style.top = '90px';
+  widgetYlabel.style.color = "white";
+  widgetContainer.appendChild(widgetYlabel);
+
   // Code for changing preset
   const globalDataRange = [0, 255];
   const lookupTable = __WEBPACK_IMPORTED_MODULE_3_vtk_js_Sources_Rendering_Core_ColorTransferFunction___default.a.newInstance();
@@ -16444,8 +17060,8 @@ function viewVolumeRender(urlToLoad, div_id) {
     activeStrokeWidth: 3,
     buttonStrokeWidth: 1.5,
     handleWidth: 3,
-    iconSize: 20, // Can be 0 if you want to remove buttons (dblClick for (+) / rightClick for (-))
-    padding: 10,
+    iconSize: 25, // Can be 0 if you want to remove buttons (dblClick for (+) / rightClick for (-))
+    padding: 15,
   });
   
   widget.setColorTransferFunction(lookupTable);
@@ -16456,8 +17072,12 @@ function viewVolumeRender(urlToLoad, div_id) {
 
   fullScreenRenderer.setResizeCallback(({ width, height }) => {
     if (width - 10 >= 0) {
-      widget.setSize(Math.min(450, width - 10), 150);
+      var widwidth = Math.min(450, width - 10);
+      widget.setSize(widwidth, 150);
+      widgetXlabel.style.left = 'calc(1em + ' + (widwidth/2 - 40) + 'px)';
+      widgetYlabel.style.left = 'calc(1em + ' + Math.min(407, width - 53) + 'px)';
       widget.render();
+      renderWindow.render();
     }
   });
   
@@ -16513,6 +17133,8 @@ function viewVolumeRender(urlToLoad, div_id) {
 function updateVolumeViewer(urlToLoad) {
   if (urlToLoad != global.volfile) {
     console.log("VolumeRend : " + urlToLoad);
+    document.getElementById('spinner').style.display = 'block';
+    
     const renderer = global.volscreen.getRenderer();
     const renderWindow = global.volscreen.getRenderWindow();
     // Load data with real-time loading progress
@@ -16542,14 +17164,16 @@ function updateVolumeViewer(urlToLoad) {
       global.widget.render();
       renderer.resetCamera();
       renderWindow.render();
+      document.getElementById('spinner').style.display = 'none';
     }).catch(function () {
       console.error('Error cannot load volume intensity');
+      document.getElementById('spinner').style.display = 'none';
     });
 
     global.volfile = urlToLoad;
   }
 }
-/* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(4)))
+/* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(5)))
 
 /***/ }),
 /* 63 */
@@ -16956,7 +17580,7 @@ Object.defineProperty(exports, "__esModule", {
 exports.newInstance = undefined;
 exports.extend = extend;
 
-var _XMLReader = __webpack_require__(127);
+var _XMLReader = __webpack_require__(130);
 
 var _XMLReader2 = _interopRequireDefault(_XMLReader);
 
@@ -16964,7 +17588,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _ImageData = __webpack_require__(50);
+var _ImageData = __webpack_require__(52);
 
 var _ImageData2 = _interopRequireDefault(_ImageData);
 
@@ -16998,9 +17622,9 @@ function vtkXMLImageDataReader(publicAPI, model) {
       var imageData = _ImageData2.default.newInstance({ origin: origin, spacing: spacing, extent: extent });
 
       // Fill data
-      _XMLReader2.default.processFieldData(imageData.getNumberOfPoints(), piece.getElementsByTagName('PointData')[0], imageData.getPointData(), compressor, byteOrder, headerType);
+      _XMLReader2.default.processFieldData(imageData.getNumberOfPoints(), piece.getElementsByTagName('PointData')[0], imageData.getPointData(), compressor, byteOrder, headerType, model.binaryBuffer);
 
-      _XMLReader2.default.processFieldData(imageData.getNumberOfCells(), piece.getElementsByTagName('CellData')[0], imageData.getCellData(), compressor, byteOrder, headerType);
+      _XMLReader2.default.processFieldData(imageData.getNumberOfCells(), piece.getElementsByTagName('CellData')[0], imageData.getCellData(), compressor, byteOrder, headerType, model.binaryBuffer);
 
       // Add new output
       model.output[outputIndex++] = imageData;
@@ -17008,7 +17632,7 @@ function vtkXMLImageDataReader(publicAPI, model) {
   };
 
   publicAPI.requestData = function (inData, outData) {
-    publicAPI.parse(model.parseData);
+    publicAPI.parseArrayBuffer(model.rawDataBuffer);
   };
 }
 
@@ -17021,7 +17645,6 @@ var DEFAULT_VALUES = {
 };
 
 // ----------------------------------------------------------------------------
-
 
 function extend(publicAPI, model) {
   var initialValues = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
@@ -17050,15 +17673,15 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 
-var _HtmlDataAccessHelper = __webpack_require__(128);
+var _HtmlDataAccessHelper = __webpack_require__(131);
 
 var _HtmlDataAccessHelper2 = _interopRequireDefault(_HtmlDataAccessHelper);
 
-var _HttpDataAccessHelper = __webpack_require__(38);
+var _HttpDataAccessHelper = __webpack_require__(40);
 
 var _HttpDataAccessHelper2 = _interopRequireDefault(_HttpDataAccessHelper);
 
-var _JSZipDataAccessHelper = __webpack_require__(129);
+var _JSZipDataAccessHelper = __webpack_require__(132);
 
 var _JSZipDataAccessHelper2 = _interopRequireDefault(_JSZipDataAccessHelper);
 
@@ -17110,7 +17733,7 @@ module.exports = Array.isArray || function (arr) {
  * reduce the final size of the bundle (only one stream implementation, not
  * two).
  */
-module.exports = __webpack_require__(133);
+module.exports = __webpack_require__(136);
 
 
 /***/ }),
@@ -17143,7 +17766,7 @@ module.exports = __webpack_require__(133);
 
 /*<replacement>*/
 
-var processNextTick = __webpack_require__(28);
+var processNextTick = __webpack_require__(29);
 /*</replacement>*/
 
 module.exports = Readable;
@@ -17159,7 +17782,7 @@ var Duplex;
 Readable.ReadableState = ReadableState;
 
 /*<replacement>*/
-var EE = __webpack_require__(42).EventEmitter;
+var EE = __webpack_require__(44).EventEmitter;
 
 var EElistenerCount = function (emitter, type) {
   return emitter.listeners(type).length;
@@ -17173,7 +17796,7 @@ var Stream = __webpack_require__(74);
 // TODO(bmeurer): Change this back to const once hole checks are
 // properly optimized away early in Ignition+TurboFan.
 /*<replacement>*/
-var Buffer = __webpack_require__(44).Buffer;
+var Buffer = __webpack_require__(46).Buffer;
 var OurUint8Array = global.Uint8Array || function () {};
 function _uint8ArrayToBuffer(chunk) {
   return Buffer.from(chunk);
@@ -17184,12 +17807,12 @@ function _isUint8Array(obj) {
 /*</replacement>*/
 
 /*<replacement>*/
-var util = __webpack_require__(22);
+var util = __webpack_require__(24);
 util.inherits = __webpack_require__(18);
 /*</replacement>*/
 
 /*<replacement>*/
-var debugUtil = __webpack_require__(134);
+var debugUtil = __webpack_require__(137);
 var debug = void 0;
 if (debugUtil && debugUtil.debuglog) {
   debug = debugUtil.debuglog('stream');
@@ -17198,7 +17821,7 @@ if (debugUtil && debugUtil.debuglog) {
 }
 /*</replacement>*/
 
-var BufferList = __webpack_require__(135);
+var BufferList = __webpack_require__(138);
 var destroyImpl = __webpack_require__(75);
 var StringDecoder;
 
@@ -18125,13 +18748,13 @@ function indexOf(xs, x) {
   }
   return -1;
 }
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(4), __webpack_require__(27)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(5), __webpack_require__(28)))
 
 /***/ }),
 /* 74 */
 /***/ (function(module, exports, __webpack_require__) {
 
-module.exports = __webpack_require__(42).EventEmitter;
+module.exports = __webpack_require__(44).EventEmitter;
 
 
 /***/ }),
@@ -18143,7 +18766,7 @@ module.exports = __webpack_require__(42).EventEmitter;
 
 /*<replacement>*/
 
-var processNextTick = __webpack_require__(28);
+var processNextTick = __webpack_require__(29);
 /*</replacement>*/
 
 // undocumented cb() API, needed for core, not for public API
@@ -18266,7 +18889,7 @@ exports._unrefActive = exports.active = function(item) {
 };
 
 // setimmediate attaches itself to the global object
-__webpack_require__(136);
+__webpack_require__(139);
 exports.setImmediate = setImmediate;
 exports.clearImmediate = clearImmediate;
 
@@ -18573,7 +19196,7 @@ module.exports = Transform;
 var Duplex = __webpack_require__(15);
 
 /*<replacement>*/
-var util = __webpack_require__(22);
+var util = __webpack_require__(24);
 util.inherits = __webpack_require__(18);
 /*</replacement>*/
 
@@ -18844,7 +19467,7 @@ if (typeof __e == 'number') __e = core; // eslint-disable-line no-undef
 /***/ (function(module, exports, __webpack_require__) {
 
 // optional / simple context binding
-var aFunction = __webpack_require__(146);
+var aFunction = __webpack_require__(149);
 module.exports = function (fn, that, length) {
   aFunction(fn);
   if (that === undefined) return fn;
@@ -18882,8 +19505,8 @@ module.exports = function (exec) {
 /* 83 */
 /***/ (function(module, exports, __webpack_require__) {
 
-var isObject = __webpack_require__(46);
-var document = __webpack_require__(30).document;
+var isObject = __webpack_require__(48);
+var document = __webpack_require__(31).document;
 // typeof document.createElement is 'object' in old IE
 var is = isObject(document) && isObject(document.createElement);
 module.exports = function (it) {
@@ -18899,16 +19522,16 @@ module.exports = function (it) {
 /* WEBPACK VAR INJECTION */(function(Buffer) {
 
 var utils = __webpack_require__(2);
-var ConvertWorker = __webpack_require__(159);
+var ConvertWorker = __webpack_require__(162);
 var GenericWorker = __webpack_require__(7);
 var base64 = __webpack_require__(79);
 var support = __webpack_require__(12);
-var external = __webpack_require__(23);
+var external = __webpack_require__(25);
 
 var NodejsStreamOutputAdapter = null;
 if (support.nodestream) {
     try {
-        NodejsStreamOutputAdapter = __webpack_require__(160);
+        NodejsStreamOutputAdapter = __webpack_require__(163);
     } catch(e) {}
 }
 
@@ -19303,7 +19926,7 @@ module.exports = DataLengthProbe;
 
 
 var GenericWorker = __webpack_require__(7);
-var crc32 = __webpack_require__(49);
+var crc32 = __webpack_require__(51);
 var utils = __webpack_require__(2);
 
 /**
@@ -19344,7 +19967,7 @@ exports.STORE = {
         return new GenericWorker("STORE decompression");
     }
 };
-exports.DEFLATE = __webpack_require__(163);
+exports.DEFLATE = __webpack_require__(166);
 
 
 /***/ }),
@@ -19371,8 +19994,8 @@ exports.DATA_DESCRIPTOR = "PK\x07\x08";
 var utils = __webpack_require__(2);
 var support = __webpack_require__(12);
 var ArrayReader = __webpack_require__(92);
-var StringReader = __webpack_require__(168);
-var NodeBufferReader = __webpack_require__(169);
+var StringReader = __webpack_require__(171);
+var NodeBufferReader = __webpack_require__(172);
 var Uint8ArrayReader = __webpack_require__(94);
 
 /**
@@ -21485,11 +22108,11 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _DataArray = __webpack_require__(5);
+var _DataArray = __webpack_require__(4);
 
 var _DataArray2 = _interopRequireDefault(_DataArray);
 
-var _Constants = __webpack_require__(55);
+var _Constants = __webpack_require__(56);
 
 var _Constants2 = _interopRequireDefault(_Constants);
 
@@ -21565,7 +22188,10 @@ function vtkScalarsToColors(publicAPI, model) {
     if (annotations && values) {
       var num = annotations.getNumberOfTuples();
       for (var i = 0; i < num; i++) {
-        model.annotationArray.push({ value: values[i], annotation: annotations[i] });
+        model.annotationArray.push({
+          value: values[i],
+          annotation: annotations[i]
+        });
       }
     }
 
@@ -21821,7 +22447,10 @@ function vtkScalarsToColors(publicAPI, model) {
       default:
       case VectorMode.MAGNITUDE:
         {
-          var magValues = _DataArray2.default.newInstance({ numberOfComponents: 1, values: new Float32Array(input.getNumberOfTuples()) });
+          var magValues = _DataArray2.default.newInstance({
+            numberOfComponents: 1,
+            values: new Float32Array(input.getNumberOfTuples())
+          });
 
           publicAPI.mapVectorsToMagnitude(input, magValues, vectorSize);
           publicAPI.mapScalarsThroughTable(magValues, output, outputFormat, 0);
@@ -21914,7 +22543,9 @@ function vtkScalarsToColors(publicAPI, model) {
 
   //----------------------------------------------------------------------------
   publicAPI.convertToRGBA = function (colors, numComp, numTuples) {
-    if (numComp === 4 && model.alpha >= 1.0 && colors.getDataType() === VtkDataTypes.UNSIGNED_CHAR) {
+    var alpha = model.alpha;
+
+    if (numComp === 4 && alpha >= 1.0 && colors.getDataType() === VtkDataTypes.UNSIGNED_CHAR) {
       return colors;
     }
 
@@ -21929,7 +22560,6 @@ function vtkScalarsToColors(publicAPI, model) {
       return newColors;
     }
 
-    var alpha = model.alpha;
     alpha = alpha > 0 ? alpha : 0;
     alpha = alpha < 1 ? alpha : 1;
 
@@ -22088,27 +22718,27 @@ var _RenderWindow = __webpack_require__(102);
 
 var _RenderWindow2 = _interopRequireDefault(_RenderWindow);
 
-var _Renderer = __webpack_require__(225);
+var _Renderer = __webpack_require__(229);
 
 var _Renderer2 = _interopRequireDefault(_Renderer);
 
-var _RenderWindow3 = __webpack_require__(229);
+var _RenderWindow3 = __webpack_require__(233);
 
 var _RenderWindow4 = _interopRequireDefault(_RenderWindow3);
 
-var _RenderWindowInteractor = __webpack_require__(230);
+var _RenderWindowInteractor = __webpack_require__(234);
 
 var _RenderWindowInteractor2 = _interopRequireDefault(_RenderWindowInteractor);
 
-__webpack_require__(26);
+__webpack_require__(21);
 
-__webpack_require__(5);
+__webpack_require__(4);
+
+__webpack_require__(22);
+
+__webpack_require__(61);
 
 __webpack_require__(37);
-
-__webpack_require__(60);
-
-__webpack_require__(35);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -22168,13 +22798,13 @@ function vtkFullScreenRenderWindow(publicAPI, model) {
   model.renderWindow.addRenderer(model.renderer);
 
   // OpenGlRenderWindow
-  model.openGlRenderWindow = _RenderWindow2.default.newInstance();
-  model.openGlRenderWindow.setContainer(model.container);
-  model.renderWindow.addView(model.openGlRenderWindow);
+  model.openGLRenderWindow = _RenderWindow2.default.newInstance();
+  model.openGLRenderWindow.setContainer(model.container);
+  model.renderWindow.addView(model.openGLRenderWindow);
 
   // Interactor
   model.interactor = _RenderWindowInteractor2.default.newInstance();
-  model.interactor.setView(model.openGlRenderWindow);
+  model.interactor.setView(model.openGLRenderWindow);
   model.interactor.initialize();
   model.interactor.bindEvents(model.container);
 
@@ -22223,7 +22853,7 @@ function vtkFullScreenRenderWindow(publicAPI, model) {
   // Handle window resize
   publicAPI.resize = function () {
     var dims = model.container.getBoundingClientRect();
-    model.openGlRenderWindow.setSize(Math.floor(dims.width), Math.floor(dims.height));
+    model.openGLRenderWindow.setSize(Math.floor(dims.width), Math.floor(dims.height));
     if (model.resizeCallback) {
       model.resizeCallback(dims);
     }
@@ -22262,7 +22892,7 @@ function extend(publicAPI, model) {
 
   // Object methods
   _macro2.default.obj(publicAPI, model);
-  _macro2.default.get(publicAPI, model, ['renderWindow', 'renderer', 'openGlRenderWindow', 'interactor', 'container', 'controlContainer']);
+  _macro2.default.get(publicAPI, model, ['renderWindow', 'renderer', 'openGLRenderWindow', 'interactor', 'container', 'controlContainer']);
 
   // Object specific methods
   vtkFullScreenRenderWindow(publicAPI, model);
@@ -22293,11 +22923,11 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _ForwardPass = __webpack_require__(189);
+var _ForwardPass = __webpack_require__(193);
 
 var _ForwardPass2 = _interopRequireDefault(_ForwardPass);
 
-var _ViewNodeFactory = __webpack_require__(190);
+var _ViewNodeFactory = __webpack_require__(194);
 
 var _ViewNodeFactory2 = _interopRequireDefault(_ViewNodeFactory);
 
@@ -22305,7 +22935,7 @@ var _RenderPass = __webpack_require__(103);
 
 var _RenderPass2 = _interopRequireDefault(_RenderPass);
 
-var _ShaderCache = __webpack_require__(222);
+var _ShaderCache = __webpack_require__(226);
 
 var _ShaderCache2 = _interopRequireDefault(_ShaderCache);
 
@@ -22313,7 +22943,7 @@ var _ViewNode = __webpack_require__(6);
 
 var _ViewNode2 = _interopRequireDefault(_ViewNode);
 
-var _TextureUnitManager = __webpack_require__(224);
+var _TextureUnitManager = __webpack_require__(228);
 
 var _TextureUnitManager2 = _interopRequireDefault(_TextureUnitManager);
 
@@ -22515,6 +23145,19 @@ function vtkOpenGLRenderWindow(publicAPI, model) {
       result = model.canvas.getContext('webgl', options) || model.canvas.getContext('experimental-webgl', options);
     }
 
+    // Do we have webvr support
+    if (navigator.getVRDisplays) {
+      navigator.getVRDisplays().then(function (displays) {
+        if (displays.length > 0) {
+          // take the first display for now
+          model.vrDisplay = displays[0];
+          // set the clipping ranges
+          model.vrDisplay.depthNear = 0.01; // meters
+          model.vrDisplay.depthFar = 100.0; // meters
+        }
+      });
+    }
+
     // prevent default context lost handler
     model.canvas.addEventListener('webglcontextlost', function (event) {
       event.preventDefault();
@@ -22523,6 +23166,64 @@ function vtkOpenGLRenderWindow(publicAPI, model) {
     model.canvas.addEventListener('webglcontextrestored', publicAPI.restoreContext, false);
 
     return result;
+  };
+
+  publicAPI.startVR = function () {
+    if (model.vrDisplay.isConnected) {
+      model.vrDisplay.requestPresent([{ source: model.canvas }]).then(function () {
+        model.oldCanvasSize = [model.canvas.width, model.canvas.height];
+
+        // const leftEye = model.vrDisplay.getEyeParameters('left');
+        // const rightEye = model.vrDisplay.getEyeParameters('right');
+        // model.canvas.width = Math.max(leftEye.renderWidth, rightEye.renderWidth) * 2;
+        // model.canvas.height = Math.max(leftEye.renderHeight, rightEye.renderHeight);
+        var ren = model.renderable.getRenderers()[0];
+        ren.resetCamera();
+        model.vrFrameData = new VRFrameData();
+        model.renderable.getInteractor().switchToVRAnimation();
+
+        publicAPI.vrRender();
+      });
+    } else {
+      vtkErrorMacro('vrDisplay is not connected');
+    }
+  };
+
+  publicAPI.stopVR = function () {
+    model.renderable.getInteractor().returnFromVRAnimation();
+    model.vrDisplay.exitPresent();
+    model.vrDisplay.cancelAnimationFrame(model.vrSceneFrame);
+
+    model.canvas.width = model.oldCanvasSize[0];
+    model.canvas.height = model.oldCanvasSize[1];
+
+    var ren = model.renderable.getRenderers()[0];
+    ren.getActiveCamera().setProjectionMatrix(null);
+
+    ren.setViewport(0.0, 0, 1.0, 1.0);
+    publicAPI.traverseAllPasses();
+  };
+
+  publicAPI.vrRender = function () {
+    model.renderable.getInteractor().updateGamepads(model.vrDisplay.displayId);
+    model.vrSceneFrame = model.vrDisplay.requestAnimationFrame(publicAPI.vrRender);
+    model.vrDisplay.getFrameData(model.vrFrameData);
+
+    // get the first renderer
+    var ren = model.renderable.getRenderers()[0];
+
+    // do the left eye
+    ren.setViewport(0, 0, 0.5, 1.0);
+    ren.getActiveCamera().computeViewParametersFromPhysicalMatrix(model.vrFrameData.leftViewMatrix);
+    ren.getActiveCamera().setProjectionMatrix(model.vrFrameData.leftProjectionMatrix);
+    publicAPI.traverseAllPasses();
+
+    ren.setViewport(0.5, 0, 1.0, 1.0);
+    ren.getActiveCamera().computeViewParametersFromPhysicalMatrix(model.vrFrameData.rightViewMatrix);
+    ren.getActiveCamera().setProjectionMatrix(model.vrFrameData.rightProjectionMatrix);
+    publicAPI.traverseAllPasses();
+
+    model.vrDisplay.submitFrame();
   };
 
   publicAPI.restoreContext = function () {
@@ -22864,7 +23565,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _Constants = __webpack_require__(25);
+var _Constants = __webpack_require__(27);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -22882,6 +23583,10 @@ function vtkOpenGLVertexArrayObject(publicAPI, model) {
   };
 
   publicAPI.initialize = function () {
+    model.instancingExtension = null;
+    if (!model.openGLRenderWindow.getWebgl2()) {
+      model.instancingExtension = model.context.getExtension('ANGLE_instanced_arrays');
+    }
     if (!model.forceEmulation && model.openGLRenderWindow && model.openGLRenderWindow.getWebgl2()) {
       model.extension = null;
       model.supported = true;
@@ -22929,7 +23634,11 @@ function vtkOpenGLVertexArrayObject(publicAPI, model) {
             gl.enableVertexAttribArray(attrIt.index + i);
             gl.vertexAttribPointer(attrIt.index + i, attrIt.size, attrIt.type, attrIt.normalize, attrIt.stride, attrIt.offset + attrIt.stride * i / attrIt.size);
             if (attrIt.divisor > 0) {
-              gl.vertexAttribDivisor(attrIt.index + i, 1);
+              if (model.instancingExtension) {
+                model.instancingExtension.vertexAttribDivisorANGLE(attrIt.index + i, 1);
+              } else {
+                gl.vertexAttribDivisor(attrIt.index + i, 1);
+              }
             }
           }
         }
@@ -22957,7 +23666,11 @@ function vtkOpenGLVertexArrayObject(publicAPI, model) {
             gl.enableVertexAttribArray(attrIt.index + i);
             gl.vertexAttribPointer(attrIt.index + i, attrIt.size, attrIt.type, attrIt.normalize, attrIt.stride, attrIt.offset + attrIt.stride * i / attrIt.size);
             if (attrIt.divisor > 0) {
-              gl.vertexAttribDivisor(attrIt.index + i, 0);
+              if (model.instancingExtension) {
+                model.instancingExtension.vertexAttribDivisorANGLE(attrIt.index + i, 0);
+              } else {
+                gl.vertexAttribDivisor(attrIt.index + i, 0);
+              }
             }
             gl.disableVertexAttribArray(attrIt.index + i);
           }
@@ -23042,7 +23755,11 @@ function vtkOpenGLVertexArrayObject(publicAPI, model) {
     gl.vertexAttribPointer(attribs.index, attribs.size, attribs.type, attribs.normalize, attribs.stride, attribs.offset);
 
     if (divisor > 0) {
-      gl.vertexAttribDivisor(attribs.index, 1);
+      if (model.instancingExtension) {
+        model.instancingExtension.vertexAttribDivisorANGLE(attribs.index, 1);
+      } else {
+        gl.vertexAttribDivisor(attribs.index, 1);
+      }
     }
 
     attribs.buffer = buffer.getHandle();
@@ -23091,7 +23808,11 @@ function vtkOpenGLVertexArrayObject(publicAPI, model) {
       gl.enableVertexAttribArray(index + i);
       gl.vertexAttribPointer(index + i, elementTupleSize, elementType, normalize, stride, offset + stride * i / elementTupleSize);
       if (divisor > 0) {
-        gl.vertexAttribDivisor(index + i, 1);
+        if (model.instancingExtension) {
+          model.instancingExtension.vertexAttribDivisorANGLE(index + i, 1);
+        } else {
+          gl.vertexAttribDivisor(index + i, 1);
+        }
       }
     }
 
@@ -23455,7 +24176,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _InteractorStyle = __webpack_require__(231);
+var _InteractorStyle = __webpack_require__(235);
 
 var _InteractorStyle2 = _interopRequireDefault(_InteractorStyle);
 
@@ -23466,6 +24187,8 @@ var _Math2 = _interopRequireDefault(_Math);
 var _Constants = __webpack_require__(109);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var States = _InteractorStyle2.default.States;
 
 /* eslint-disable no-lonely-if */
 
@@ -23482,25 +24205,25 @@ function vtkInteractorStyleTrackballCamera(publicAPI, model) {
     var pos = model.interactor.getAnimationEventPosition(model.interactor.getPointerIndex());
 
     switch (model.state) {
-      case _Constants.States.IS_ROTATE:
+      case States.IS_ROTATE:
         publicAPI.findPokedRenderer(pos.x, pos.y);
         publicAPI.rotate();
         publicAPI.invokeInteractionEvent({ type: 'InteractionEvent' });
         break;
 
-      case _Constants.States.IS_PAN:
+      case States.IS_PAN:
         publicAPI.findPokedRenderer(pos.x, pos.y);
         publicAPI.pan();
         publicAPI.invokeInteractionEvent({ type: 'InteractionEvent' });
         break;
 
-      case _Constants.States.IS_DOLLY:
+      case States.IS_DOLLY:
         publicAPI.findPokedRenderer(pos.x, pos.y);
         publicAPI.dolly();
         publicAPI.invokeInteractionEvent({ type: 'InteractionEvent' });
         break;
 
-      case _Constants.States.IS_SPIN:
+      case States.IS_SPIN:
         publicAPI.findPokedRenderer(pos.x, pos.y);
         publicAPI.spin();
         publicAPI.invokeInteractionEvent({ type: 'InteractionEvent' });
@@ -23509,6 +24232,53 @@ function vtkInteractorStyleTrackballCamera(publicAPI, model) {
       default:
         break;
     }
+  };
+
+  publicAPI.handleButton3D = function (arg) {
+    var ed = arg.calldata;
+    publicAPI.findPokedRenderer(0, 0);
+    if (model.currentRenderer === null) {
+      return;
+    }
+
+    if (ed && ed.pressed && ed.device === _Constants.Device.RightController && ed.input === _Constants.Input.TrackPad) {
+      publicAPI.startCameraPose();
+      publicAPI.setAnimationStateOn();
+      return;
+    }
+    if (ed && !ed.pressed && ed.device === _Constants.Device.RightController && ed.input === _Constants.Input.TrackPad && model.state === States.IS_CAMERA_POSE) {
+      publicAPI.endCameraPose();
+      publicAPI.setAnimationStateOff();
+      // return;
+    }
+  };
+
+  publicAPI.handleMove3D = function (arg) {
+    var ed = arg.calldata;
+    switch (model.state) {
+      case States.IS_CAMERA_POSE:
+        publicAPI.updateCameraPose(ed);
+        break;
+      default:
+    }
+  };
+
+  publicAPI.updateCameraPose = function (ed) {
+    // move the world in the direction of the
+    // controller
+    var camera = model.currentRenderer.getActiveCamera();
+    var oldTrans = camera.getPhysicalTranslation();
+
+    // look at the y axis to determine how fast / what direction to move
+    var speed = ed.gamepad.axes[1];
+
+    // 0.05 meters / frame movement
+    var pscale = speed * 0.05 / camera.getPhysicalScale();
+
+    // convert orientation to world coordinate direction
+    var dir = camera.physicalOrientationToWorldDirection(ed.orientation);
+
+    camera.setPhysicalTranslation(oldTrans[0] + dir[0] * pscale, oldTrans[1] + dir[1] * pscale, oldTrans[2] + dir[2] * pscale);
   };
 
   //----------------------------------------------------------------------------
@@ -23542,22 +24312,22 @@ function vtkInteractorStyleTrackballCamera(publicAPI, model) {
   //--------------------------------------------------------------------------
   publicAPI.handleLeftButtonRelease = function () {
     switch (model.state) {
-      case _Constants.States.IS_DOLLY:
+      case States.IS_DOLLY:
         publicAPI.endDolly();
         publicAPI.setAnimationStateOff();
         break;
 
-      case _Constants.States.IS_PAN:
+      case States.IS_PAN:
         publicAPI.endPan();
         publicAPI.setAnimationStateOff();
         break;
 
-      case _Constants.States.IS_SPIN:
+      case States.IS_SPIN:
         publicAPI.endSpin();
         publicAPI.setAnimationStateOff();
         break;
 
-      case _Constants.States.IS_ROTATE:
+      case States.IS_ROTATE:
         publicAPI.endRotate();
         publicAPI.setAnimationStateOff();
         break;
@@ -23574,25 +24344,28 @@ function vtkInteractorStyleTrackballCamera(publicAPI, model) {
   //----------------------------------------------------------------------------
   publicAPI.handlePinch = function () {
     var pos = model.interactor.getEventPosition(model.interactor.getPointerIndex());
-    publicAPI.findPokedRenderer(pos.x, pos.y);
-    if (model.currentRenderer === null) {
-      return;
-    }
 
-    var camera = model.currentRenderer.getActiveCamera();
-
-    var dyf = model.interactor.getScale() / model.interactor.getLastScale();
-    if (camera.getParallelProjection()) {
-      camera.setParallelScale(camera.getParallelScale() / dyf);
-    } else {
-      camera.dolly(dyf);
-      if (model.autoAdjustCameraClippingRange) {
-        model.currentRenderer.resetCameraClippingRange();
+    if (pos) {
+      publicAPI.findPokedRenderer(pos.x, pos.y);
+      if (model.currentRenderer === null) {
+        return;
       }
-    }
 
-    if (model.interactor.getLightFollowCamera()) {
-      model.currentRenderer.updateLightsGeometryToFollowCamera();
+      var camera = model.currentRenderer.getActiveCamera();
+
+      var dyf = model.interactor.getScale() / model.interactor.getLastScale();
+      if (camera.getParallelProjection()) {
+        camera.setParallelScale(camera.getParallelScale() / dyf);
+      } else {
+        camera.dolly(dyf);
+        if (model.autoAdjustCameraClippingRange) {
+          model.currentRenderer.resetCameraClippingRange();
+        }
+      }
+
+      if (model.interactor.getLightFollowCamera()) {
+        model.currentRenderer.updateLightsGeometryToFollowCamera();
+      }
     }
   };
 
@@ -23685,7 +24458,7 @@ function vtkInteractorStyleTrackballCamera(publicAPI, model) {
     var ryf = dy * deltaElevation * model.motionFactor;
 
     var camera = model.currentRenderer.getActiveCamera();
-    if (!isNaN(rxf) && !isNaN(ryf)) {
+    if (!Number.isNaN(rxf) && !Number.isNaN(ryf)) {
       camera.azimuth(rxf);
       camera.elevation(ryf);
       camera.orthogonalizeViewUp();
@@ -23718,7 +24491,7 @@ function vtkInteractorStyleTrackballCamera(publicAPI, model) {
     var oldAngle = _Math2.default.degreesFromRadians(Math.atan2(lastPos.y - center[1], lastPos.x - center[0]));
     var newAngle = _Math2.default.degreesFromRadians(Math.atan2(pos.y - center[1], pos.x - center[0])) - oldAngle;
 
-    if (!isNaN(newAngle)) {
+    if (!Number.isNaN(newAngle)) {
       camera.roll(newAngle);
       camera.orthogonalizeViewUp();
     }
@@ -23785,7 +24558,7 @@ function vtkInteractorStyleTrackballCamera(publicAPI, model) {
 
   //----------------------------------------------------------------------------
   publicAPI.dollyByFactor = function (factor) {
-    if (model.currentRenderer === null || isNaN(factor)) {
+    if (model.currentRenderer === null || Number.isNaN(factor)) {
       return;
     }
 
@@ -23852,31 +24625,23 @@ exports.default = Object.assign({ newInstance: newInstance, extend: extend });
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-var States = exports.States = {
-  IS_START: 0,
-  IS_NONE: 0,
+var Device = exports.Device = {
+  Unknown: 0,
+  LeftController: 1,
+  RightController: 2
+};
 
-  IS_ROTATE: 1,
-  IS_PAN: 2,
-  IS_SPIN: 3,
-  IS_DOLLY: 4,
-  IS_ZOOM: 5,
-  IS_USCALE: 6,
-  IS_TIMER: 7,
-  IS_FORWARDFLY: 8,
-  IS_REVERSEFLY: 9,
-  IS_TWO_POINTER: 10,
-
-  IS_ANIM_OFF: 0,
-  IS_ANIM_ON: 1,
-
-  IS_WINDOW_LEVEL: 1024,
-  IS_PICK: 1025,
-  IS_SLICE: 1026
+var Input = exports.Input = {
+  Unknown: 0,
+  Trigger: 1,
+  TrackPad: 2,
+  Grip: 3,
+  ApplicationMenu: 4
 };
 
 exports.default = {
-  States: States
+  Device: Device,
+  Input: Input
 };
 
 /***/ }),
@@ -23898,7 +24663,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _BoundingBox = __webpack_require__(59);
+var _BoundingBox = __webpack_require__(60);
 
 var _BoundingBox2 = _interopRequireDefault(_BoundingBox);
 
@@ -23906,7 +24671,7 @@ var _Math = __webpack_require__(1);
 
 var _Math2 = _interopRequireDefault(_Math);
 
-var _Prop = __webpack_require__(235);
+var _Prop = __webpack_require__(240);
 
 var _Prop2 = _interopRequireDefault(_Prop);
 
@@ -24118,9 +24883,9 @@ Object.defineProperty(exports, "__esModule", {
 exports.newInstance = undefined;
 exports.extend = extend;
 
-__webpack_require__(50);
+__webpack_require__(52);
 
-__webpack_require__(37);
+__webpack_require__(22);
 
 var _vtk = __webpack_require__(14);
 
@@ -24134,11 +24899,11 @@ var _DataAccessHelper = __webpack_require__(70);
 
 var _DataAccessHelper2 = _interopRequireDefault(_DataAccessHelper);
 
-var _DataArray = __webpack_require__(5);
+var _DataArray = __webpack_require__(4);
 
 var _DataArray2 = _interopRequireDefault(_DataArray);
 
-var _StringArray = __webpack_require__(236);
+var _StringArray = __webpack_require__(241);
 
 var _StringArray2 = _interopRequireDefault(_StringArray);
 
@@ -24200,7 +24965,13 @@ function processDataSet(publicAPI, model, dataset, fetchArray, resolve, reject, 
       dataset[location].arrays.map(function (i) {
         return i.data;
       }).forEach(function (array) {
-        model.arrays.push({ name: array.name, enable: enable, location: location, array: array, registration: array.ref.registration || 'addArray' });
+        model.arrays.push({
+          name: array.name,
+          enable: enable,
+          location: location,
+          array: array,
+          registration: array.ref.registration || 'addArray'
+        });
       });
 
       // Reset data arrays
@@ -24211,6 +24982,7 @@ function processDataSet(publicAPI, model, dataset, fetchArray, resolve, reject, 
   // Fetch geometry arrays
   var pendingPromises = [];
   var progressCallback = model.progressCallback;
+
   var compression = model.fetchGzip ? 'gz' : null;
   GEOMETRY_ARRAYS[dataset.vtkClass](dataset).forEach(function (array) {
     pendingPromises.push(fetchArray(array, { compression: compression, progressCallback: progressCallback }));
@@ -24275,13 +25047,13 @@ function vtkHttpDataSetReader(publicAPI, model) {
               model.baseURL = '';
               model.dataAccessHelper.fetchJSON(publicAPI, 'index.json').then(function (dataset) {
                 processDataSet(publicAPI, model, dataset, fetchArray, resolve, reject, loadData);
-              }, function (xhr, e) {
-                reject(xhr, e);
+              }, function (error) {
+                reject(error);
               });
             }
           });
-        }, function (xhr, e) {
-          reject(xhr, e);
+        }, function (error) {
+          reject(error);
         });
       });
     }
@@ -24289,8 +25061,8 @@ function vtkHttpDataSetReader(publicAPI, model) {
     return new Promise(function (resolve, reject) {
       model.dataAccessHelper.fetchJSON(publicAPI, model.url).then(function (dataset) {
         processDataSet(publicAPI, model, dataset, fetchArray, resolve, reject, loadData);
-      }, function (xhr, e) {
-        reject(xhr, e);
+      }, function (error) {
+        reject(error);
       });
     });
   };
@@ -24329,15 +25101,19 @@ function vtkHttpDataSetReader(publicAPI, model) {
     });
 
     return new Promise(function (resolve, reject) {
-      var error = function error(xhr, e) {
-        reject(xhr, e);
+      var error = function error(e) {
+        reject(e);
       };
 
       var processNext = function processNext() {
         if (arrayToFecth.length) {
           var progressCallback = model.progressCallback;
+
           var compression = model.fetchGzip ? 'gz' : null;
-          fetchArray(arrayToFecth.pop(), { compression: compression, progressCallback: progressCallback }).then(processNext, error);
+          fetchArray(arrayToFecth.pop(), {
+            compression: compression,
+            progressCallback: progressCallback
+          }).then(processNext, error);
         } else if (datasetObj) {
           // Perform array registration
           model.arrays.filter(function (array) {
@@ -24395,7 +25171,6 @@ var DEFAULT_VALUES = {
 
 // ----------------------------------------------------------------------------
 
-
 function extend(publicAPI, model) {
   var initialValues = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
 
@@ -24411,6 +25186,11 @@ function extend(publicAPI, model) {
 
   // Object methods
   vtkHttpDataSetReader(publicAPI, model);
+
+  // Make sure we can destructuring progressCallback from model
+  if (model.progressCallback === undefined) {
+    model.progressCallback = null;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -24443,19 +25223,7 @@ function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { de
 var vtkErrorMacro = _macro2.default.vtkErrorMacro;
 
 // ----------------------------------------------------------------------------
-// Global methods
-// ----------------------------------------------------------------------------
-/* eslint-disable no-continue                                                */
-
-// Add module-level functions or api that you want to expose statically via
-// the next section...
-
-// ----------------------------------------------------------------------------
-// Static API
-// ----------------------------------------------------------------------------
-
-// ----------------------------------------------------------------------------
-// vtkMyClass methods
+// vtkPiecewiseFunction methods
 // ----------------------------------------------------------------------------
 
 function vtkPiecewiseFunction(publicAPI, model) {
@@ -24847,6 +25615,8 @@ function vtkPiecewiseFunction(publicAPI, model) {
   };
 
   // Returns a table of function values evaluated at regular intervals
+  /* eslint-disable prefer-destructuring */
+  /* eslint-disable no-continue */
   publicAPI.getTable = function (xStart, xEnd, size, table, stride) {
     var i = void 0;
     var idx = 0;
@@ -24996,6 +25766,8 @@ function vtkPiecewiseFunction(publicAPI, model) {
     }
   };
 }
+/* eslint-enable prefer-destructuring */
+/* eslint-enable no-continue */
 
 // ----------------------------------------------------------------------------
 // Object factory
@@ -25054,7 +25826,7 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 
-var _ColorMaps = __webpack_require__(241);
+var _ColorMaps = __webpack_require__(246);
 
 var _ColorMaps2 = _interopRequireDefault(_ColorMaps);
 
@@ -25104,37 +25876,40 @@ Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 /* harmony export (immutable) */ __webpack_exports__["loadLabel"] = loadLabel;
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_vtk_js_Sources_favicon__ = __webpack_require__(63);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_vtk_js_Sources_favicon___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0_vtk_js_Sources_favicon__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_vtk_js_Sources_IO_Core_DataAccessHelper_HttpDataAccessHelper__ = __webpack_require__(38);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_vtk_js_Sources_IO_Core_DataAccessHelper_HttpDataAccessHelper__ = __webpack_require__(40);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_vtk_js_Sources_IO_Core_DataAccessHelper_HttpDataAccessHelper___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1_vtk_js_Sources_IO_Core_DataAccessHelper_HttpDataAccessHelper__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_vtk_js_Sources_IO_XML_XMLImageDataReader__ = __webpack_require__(69);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_vtk_js_Sources_IO_XML_XMLImageDataReader___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_2_vtk_js_Sources_IO_XML_XMLImageDataReader__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3_vtk_js_Sources_Rendering_Core_Actor__ = __webpack_require__(60);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3_vtk_js_Sources_Rendering_Core_Actor__ = __webpack_require__(61);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_3_vtk_js_Sources_Rendering_Core_Actor___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_3_vtk_js_Sources_Rendering_Core_Actor__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4_vtk_js_Sources_Rendering_Misc_FullScreenRenderWindow__ = __webpack_require__(101);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4_vtk_js_Sources_Rendering_Misc_FullScreenRenderWindow___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_4_vtk_js_Sources_Rendering_Misc_FullScreenRenderWindow__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5_vtk_js_Sources_IO_Core_HttpDataSetReader__ = __webpack_require__(111);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5_vtk_js_Sources_IO_Core_HttpDataSetReader___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_5_vtk_js_Sources_IO_Core_HttpDataSetReader__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_6_vtk_js_Sources_Filters_General_ImageMarchingCubes__ = __webpack_require__(242);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_6_vtk_js_Sources_Filters_General_ImageMarchingCubes___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_6_vtk_js_Sources_Filters_General_ImageMarchingCubes__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_7_vtk_js_Sources_Rendering_Core_Mapper__ = __webpack_require__(35);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_7_vtk_js_Sources_Rendering_Core_Mapper___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_7_vtk_js_Sources_Rendering_Core_Mapper__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_8_vtk_js_Sources_Filters_General_Calculator__ = __webpack_require__(244);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_8_vtk_js_Sources_Filters_General_Calculator___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_8_vtk_js_Sources_Filters_General_Calculator__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_9_vtk_js_Sources_Rendering_Core_ColorTransferFunction__ = __webpack_require__(54);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_9_vtk_js_Sources_Rendering_Core_ColorTransferFunction___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_9_vtk_js_Sources_Rendering_Core_ColorTransferFunction__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_10_vtk_js_Sources_Rendering_Core_ColorTransferFunction_ColorMaps__ = __webpack_require__(113);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_10_vtk_js_Sources_Rendering_Core_ColorTransferFunction_ColorMaps___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_10_vtk_js_Sources_Rendering_Core_ColorTransferFunction_ColorMaps__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_11_vtk_js_Sources_Common_Core_Math__ = __webpack_require__(1);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_11_vtk_js_Sources_Common_Core_Math___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_11_vtk_js_Sources_Common_Core_Math__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_12_vtk_js_Sources_Rendering_Core_CellPicker__ = __webpack_require__(245);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_12_vtk_js_Sources_Rendering_Core_CellPicker___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_12_vtk_js_Sources_Rendering_Core_CellPicker__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_13_vtk_js_Sources_Common_DataModel_DataSetAttributes_Constants__ = __webpack_require__(52);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_13_vtk_js_Sources_Common_DataModel_DataSetAttributes_Constants___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_13_vtk_js_Sources_Common_DataModel_DataSetAttributes_Constants__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_14_vtk_js_Sources_Common_DataModel_DataSet_Constants__ = __webpack_require__(53);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_14_vtk_js_Sources_Common_DataModel_DataSet_Constants___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_14_vtk_js_Sources_Common_DataModel_DataSet_Constants__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_15_myPickerInteractorStyle__ = __webpack_require__(252);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_16__controller_html__ = __webpack_require__(255);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_16__controller_html___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_16__controller_html__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4_vtk_js_Sources_Filters_Sources_ArrowSource__ = __webpack_require__(247);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4_vtk_js_Sources_Filters_Sources_ArrowSource___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_4_vtk_js_Sources_Filters_Sources_ArrowSource__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5_vtk_js_Sources_Rendering_Misc_FullScreenRenderWindow__ = __webpack_require__(101);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_5_vtk_js_Sources_Rendering_Misc_FullScreenRenderWindow___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_5_vtk_js_Sources_Rendering_Misc_FullScreenRenderWindow__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_6_vtk_js_Sources_IO_Core_HttpDataSetReader__ = __webpack_require__(111);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_6_vtk_js_Sources_IO_Core_HttpDataSetReader___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_6_vtk_js_Sources_IO_Core_HttpDataSetReader__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_7_vtk_js_Sources_Filters_General_ImageMarchingCubes__ = __webpack_require__(250);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_7_vtk_js_Sources_Filters_General_ImageMarchingCubes___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_7_vtk_js_Sources_Filters_General_ImageMarchingCubes__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_8_vtk_js_Sources_Rendering_Core_Mapper__ = __webpack_require__(37);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_8_vtk_js_Sources_Rendering_Core_Mapper___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_8_vtk_js_Sources_Rendering_Core_Mapper__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_9_vtk_js_Sources_Filters_General_Calculator__ = __webpack_require__(252);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_9_vtk_js_Sources_Filters_General_Calculator___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_9_vtk_js_Sources_Filters_General_Calculator__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_10_vtk_js_Sources_Rendering_Core_ColorTransferFunction__ = __webpack_require__(55);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_10_vtk_js_Sources_Rendering_Core_ColorTransferFunction___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_10_vtk_js_Sources_Rendering_Core_ColorTransferFunction__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_11_vtk_js_Sources_Rendering_Core_ColorTransferFunction_ColorMaps__ = __webpack_require__(113);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_11_vtk_js_Sources_Rendering_Core_ColorTransferFunction_ColorMaps___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_11_vtk_js_Sources_Rendering_Core_ColorTransferFunction_ColorMaps__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_12_vtk_js_Sources_Common_Core_Math__ = __webpack_require__(1);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_12_vtk_js_Sources_Common_Core_Math___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_12_vtk_js_Sources_Common_Core_Math__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_13_vtk_js_Sources_Rendering_Core_CellPicker__ = __webpack_require__(253);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_13_vtk_js_Sources_Rendering_Core_CellPicker___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_13_vtk_js_Sources_Rendering_Core_CellPicker__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_14_vtk_js_Sources_Common_DataModel_DataSetAttributes_Constants__ = __webpack_require__(32);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_14_vtk_js_Sources_Common_DataModel_DataSetAttributes_Constants___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_14_vtk_js_Sources_Common_DataModel_DataSetAttributes_Constants__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_15_vtk_js_Sources_Common_DataModel_DataSet_Constants__ = __webpack_require__(54);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_15_vtk_js_Sources_Common_DataModel_DataSet_Constants___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_15_vtk_js_Sources_Common_DataModel_DataSet_Constants__);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_16_myPickerInteractorStyle__ = __webpack_require__(260);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_17__controller_html__ = __webpack_require__(261);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_17__controller_html___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_17__controller_html__);
+
 
 
 
@@ -25171,16 +25946,16 @@ function viewIsoSurface(urlToLoad, div_id) {
   wrappercontainer.appendChild(vtkcontainer);
 
   // Create window on left panel
-  const fullScreenRenderWindow = __WEBPACK_IMPORTED_MODULE_4_vtk_js_Sources_Rendering_Misc_FullScreenRenderWindow___default.a.newInstance({
+  const fullScreenRenderWindow = __WEBPACK_IMPORTED_MODULE_5_vtk_js_Sources_Rendering_Misc_FullScreenRenderWindow___default.a.newInstance({
     rootContainer: vtkcontainer,
     background: [0, 0, 0],
     containerStyle: { height: 'calc(100vh - 57px)', width: 'calc(50vw - 10px)', position: 'absolute' }
   });
   const renderWindow = fullScreenRenderWindow.getRenderWindow();
   const renderer = fullScreenRenderWindow.getRenderer();
-  fullScreenRenderWindow.addController(__WEBPACK_IMPORTED_MODULE_16__controller_html___default.a);
+  fullScreenRenderWindow.addController(__WEBPACK_IMPORTED_MODULE_17__controller_html___default.a);
 
-  const lookupTable = __WEBPACK_IMPORTED_MODULE_9_vtk_js_Sources_Rendering_Core_ColorTransferFunction___default.a.newInstance();
+  const lookupTable = __WEBPACK_IMPORTED_MODULE_10_vtk_js_Sources_Rendering_Core_ColorTransferFunction___default.a.newInstance();
   lookupTable.setNanColor(1, 1, 1, 1);
   lookupTable.addRGBPoint(0, 1.0, 1.0, 1.0);
   lookupTable.addRGBPoint(100, 0.7, 0.7, 0.7);
@@ -25189,25 +25964,25 @@ function viewIsoSurface(urlToLoad, div_id) {
   lookupTable.setMappingRange(0, 1);
 
   const actor = __WEBPACK_IMPORTED_MODULE_3_vtk_js_Sources_Rendering_Core_Actor___default.a.newInstance();
-  const mapper = __WEBPACK_IMPORTED_MODULE_7_vtk_js_Sources_Rendering_Core_Mapper___default.a.newInstance({
+  const mapper = __WEBPACK_IMPORTED_MODULE_8_vtk_js_Sources_Rendering_Core_Mapper___default.a.newInstance({
     interpolateScalarsBeforeMapping: true,
     useLookupTableScalarRange: true,
     lookupTable
   });
-  const marchingCube = __WEBPACK_IMPORTED_MODULE_6_vtk_js_Sources_Filters_General_ImageMarchingCubes___default.a.newInstance({ contourValue: 0.0, computeNormals: true, mergePoints: true });
+  const marchingCube = __WEBPACK_IMPORTED_MODULE_7_vtk_js_Sources_Filters_General_ImageMarchingCubes___default.a.newInstance({ contourValue: 0.0, computeNormals: true, mergePoints: true });
   marchingCube.setComputeNormals(true);
   // Set isosurface color
-  const filter = __WEBPACK_IMPORTED_MODULE_8_vtk_js_Sources_Filters_General_Calculator___default.a.newInstance();
+  const filter = __WEBPACK_IMPORTED_MODULE_9_vtk_js_Sources_Filters_General_Calculator___default.a.newInstance();
 
   // Add picker
   // Press shift+click to pick
-  const picker = __WEBPACK_IMPORTED_MODULE_12_vtk_js_Sources_Rendering_Core_CellPicker___default.a.newInstance();
+  const picker = __WEBPACK_IMPORTED_MODULE_13_vtk_js_Sources_Rendering_Core_CellPicker___default.a.newInstance();
   picker.setPickFromList(1);
   picker.initializePickList();
   // Only try to pick cone
   picker.addPickList(actor);
   // Add picker interactor
-  const iStyle = __WEBPACK_IMPORTED_MODULE_15_myPickerInteractorStyle__["a" /* default */].newInstance();
+  const iStyle = __WEBPACK_IMPORTED_MODULE_16_myPickerInteractorStyle__["a" /* default */].newInstance();
   iStyle.setContainer(fullScreenRenderWindow.getContainer());
   renderWindow.getInteractor().setInteractorStyle(iStyle);
   renderWindow.getInteractor().setPicker(picker);
@@ -25221,6 +25996,15 @@ function viewIsoSurface(urlToLoad, div_id) {
   // Add isosurface to renderer
   renderer.addActor(actor);
   renderer.getActiveCamera().set({ position: [0, 0, -1], viewUp: [0, -1, 0] });
+
+  // Add axes
+  const arrowSource = __WEBPACK_IMPORTED_MODULE_4_vtk_js_Sources_Filters_Sources_ArrowSource___default.a.newInstance();
+  const mapperArrow = __WEBPACK_IMPORTED_MODULE_8_vtk_js_Sources_Rendering_Core_Mapper___default.a.newInstance();
+  mapperArrow.setInputConnection(coneSource.getOutputPort());
+  const actoraxes = __WEBPACK_IMPORTED_MODULE_3_vtk_js_Sources_Rendering_Core_Actor___default.a.newInstance();
+  actoraxes.getProperty().setColor(1.0, 0.0, 0.0);
+  actoraxes.setMapper(mapperArrow);
+  renderer.addActor(actoraxes);
 
   // Function for updating iso-value
   function updateIsoValue(e) {
@@ -25245,10 +26029,11 @@ function updateIsoSurface(urlToLoad) {
   // Update only when volume changes
   if (urlToLoad != global.isofile) {
     console.log("IsoSurface : " + urlToLoad);
-
-    // Create new DIV for showing real-time loading progress
+    document.getElementById('spinner').style.display = 'block';
+    
     const renderer = global.isoscreen.getRenderer();
     const renderWindow = global.isoscreen.getRenderWindow();
+    // Create new DIV for showing real-time loading progress
     const progressContainer = document.createElement('div');
 
     const progressCallback = (progressEvent) => {
@@ -25282,10 +26067,12 @@ function updateIsoSurface(urlToLoad) {
       // Update renderer
       renderer.resetCamera();
       renderWindow.render();
+      document.getElementById('spinner').style.display = 'none';
     }).catch(function () {
       console.error('Error cannot load isosurface');
       delete global.distance;
       delete global.image_dim;
+      document.getElementById('spinner').style.display = 'none';
     });
 
     // Save current volume name
@@ -25298,8 +26085,9 @@ function updateIsoSurface(urlToLoad) {
 // ----------------------------------------------------------------------------
 function updateProteinPair(ppiToLoad) {
   if (ppiToLoad != global.ppifile) {
-
     console.log("ProteinPair : " + ppiToLoad);
+    document.getElementById('spinner').style.display = 'block';
+    
     // Load protein interaction
     const renderWindow = global.isoscreen.getRenderWindow();
     const progressContainer = document.createElement('div');
@@ -25324,10 +26112,10 @@ function updateProteinPair(ppiToLoad) {
       global.filter.setFormula({
         getArrays: inputDataSets => ({
           input: [
-            { location: __WEBPACK_IMPORTED_MODULE_14_vtk_js_Sources_Common_DataModel_DataSet_Constants__["FieldDataTypes"].COORDINATE }
+            { location: __WEBPACK_IMPORTED_MODULE_15_vtk_js_Sources_Common_DataModel_DataSet_Constants__["FieldDataTypes"].COORDINATE }
           ],
           output: [
-            { location: __WEBPACK_IMPORTED_MODULE_14_vtk_js_Sources_Common_DataModel_DataSet_Constants__["FieldDataTypes"].POINT, name: 'Random', dataType: 'Float32Array', attribute: __WEBPACK_IMPORTED_MODULE_13_vtk_js_Sources_Common_DataModel_DataSetAttributes_Constants__["AttributeTypes"].SCALARS },
+            { location: __WEBPACK_IMPORTED_MODULE_15_vtk_js_Sources_Common_DataModel_DataSet_Constants__["FieldDataTypes"].POINT, name: 'Random', dataType: 'Float32Array', attribute: __WEBPACK_IMPORTED_MODULE_14_vtk_js_Sources_Common_DataModel_DataSetAttributes_Constants__["AttributeTypes"].SCALARS },
           ],
         }),
         evaluate: (arraysIn, arraysOut) => {
@@ -25365,10 +26153,12 @@ function updateProteinPair(ppiToLoad) {
       });
 
       renderWindow.render();
+      document.getElementById('spinner').style.display = 'none';
     }).catch(function () {
       console.error('Error cannot load protein pair');
       resertProteinPair();
       renderWindow.render();
+      document.getElementById('spinner').style.display = 'none';
     });
 
     global.ppifile = ppiToLoad;
@@ -25381,13 +26171,13 @@ function resertProteinPair() {
     getArrays: inputDataSets => ({
       input: [],
       output: [
-        { location: __WEBPACK_IMPORTED_MODULE_14_vtk_js_Sources_Common_DataModel_DataSet_Constants__["FieldDataTypes"].POINT, name: 'Random', dataType: 'Float32Array', attribute: __WEBPACK_IMPORTED_MODULE_13_vtk_js_Sources_Common_DataModel_DataSetAttributes_Constants__["AttributeTypes"].SCALARS },
+        { location: __WEBPACK_IMPORTED_MODULE_15_vtk_js_Sources_Common_DataModel_DataSet_Constants__["FieldDataTypes"].POINT, name: 'Random', dataType: 'Float32Array', attribute: __WEBPACK_IMPORTED_MODULE_14_vtk_js_Sources_Common_DataModel_DataSetAttributes_Constants__["AttributeTypes"].SCALARS },
       ],
     }),
     evaluate: (arraysIn, arraysOut) => {
       const [scalars] = arraysOut.map(d => d.getData());
       for (let i = 0; i < scalars.length; i++) {
-        scalars[i] = __WEBPACK_IMPORTED_MODULE_11_vtk_js_Sources_Common_Core_Math___default.a.Nan;
+        scalars[i] = __WEBPACK_IMPORTED_MODULE_12_vtk_js_Sources_Common_Core_Math___default.a.Nan;
       }
     },
   });
@@ -25399,6 +26189,8 @@ function resertProteinPair() {
 // ----------------------------------------------------------------------------
 function loadLabel(labelToLoad) {
   console.log("Label : " + labelToLoad);
+  document.getElementById('spinner').style.display = 'block';
+  
   // Load label
   const progressContainer = document.createElement('div');
 
@@ -25418,16 +26210,304 @@ function loadLabel(labelToLoad) {
     global.label = dataArray.getData();
     // console.log(global.label_dim);
     // console.log(global.label);
+    document.getElementById('spinner').style.display = 'none';
   }).catch(function () {
     console.error('Error cannot load label');
     delete global.label;
     delete global.label_dim;
+    document.getElementById('spinner').style.display = 'none';
   });
 }
-/* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(4)))
+/* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(5)))
 
 /***/ }),
 /* 115 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.newInstance = undefined;
+exports.extend = extend;
+
+var _macro = __webpack_require__(0);
+
+var _macro2 = _interopRequireDefault(_macro);
+
+var _PolyData = __webpack_require__(22);
+
+var _PolyData2 = _interopRequireDefault(_PolyData);
+
+var _MatrixBuilder = __webpack_require__(116);
+
+var _MatrixBuilder2 = _interopRequireDefault(_MatrixBuilder);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } else { return Array.from(arr); } }
+
+// ----------------------------------------------------------------------------
+// vtkConeSource methods
+// ----------------------------------------------------------------------------
+
+function vtkConeSource(publicAPI, model) {
+  // Set our className
+  model.classHierarchy.push('vtkConeSource');
+
+  function requestData(inData, outData) {
+    var _vtkMatrixBuilder$bui;
+
+    if (model.deleted) {
+      return;
+    }
+
+    var dataset = outData[0];
+
+    var angle = 2 * Math.PI / model.resolution;
+    var xbot = -model.height / 2.0;
+    var numberOfPoints = model.resolution + 1;
+    var cellArraySize = 4 * model.resolution + 1 + model.resolution;
+
+    // Points
+    var pointIdx = 0;
+    var points = new window[model.pointType](numberOfPoints * 3);
+
+    // Cells
+    var cellLocation = 0;
+    var polys = new Uint32Array(cellArraySize);
+
+    // Add summit point
+    points[0] = model.height / 2.0;
+    points[1] = 0.0;
+    points[2] = 0.0;
+
+    // Create bottom cell
+    if (model.capping) {
+      polys[cellLocation++] = model.resolution;
+    }
+
+    // Add all points
+    for (var i = 0; i < model.resolution; i++) {
+      pointIdx++;
+      points[pointIdx * 3 + 0] = xbot;
+      points[pointIdx * 3 + 1] = model.radius * Math.cos(i * angle);
+      points[pointIdx * 3 + 2] = model.radius * Math.sin(i * angle);
+
+      // Add points to bottom cell in reverse order
+      if (model.capping) {
+        polys[model.resolution - cellLocation++ + 1] = pointIdx;
+      }
+    }
+
+    // Add all triangle cells
+    for (var _i = 0; _i < model.resolution; _i++) {
+      polys[cellLocation++] = 3;
+      polys[cellLocation++] = 0;
+      polys[cellLocation++] = _i + 1;
+      polys[cellLocation++] = _i + 2 > model.resolution ? 1 : _i + 2;
+    }
+
+    // Apply tranformation to the points coordinates
+    (_vtkMatrixBuilder$bui = _MatrixBuilder2.default.buildFromRadian()).translate.apply(_vtkMatrixBuilder$bui, _toConsumableArray(model.center)).rotateFromDirections([1, 0, 0], model.direction).apply(points);
+
+    dataset = _PolyData2.default.newInstance();
+    dataset.getPoints().setData(points, 3);
+    dataset.getPolys().setData(polys, 1);
+
+    // Update output
+    outData[0] = dataset;
+  }
+
+  // Expose methods
+  publicAPI.requestData = requestData;
+}
+
+// ----------------------------------------------------------------------------
+// Object factory
+// ----------------------------------------------------------------------------
+
+var DEFAULT_VALUES = {
+  height: 1.0,
+  radius: 0.5,
+  resolution: 6,
+  center: [0, 0, 0],
+  direction: [1.0, 0.0, 0.0],
+  capping: true,
+  pointType: 'Float32Array'
+};
+
+// ----------------------------------------------------------------------------
+
+function extend(publicAPI, model) {
+  var initialValues = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+
+  Object.assign(model, DEFAULT_VALUES, initialValues);
+
+  // Build VTK API
+  _macro2.default.obj(publicAPI, model);
+  _macro2.default.setGet(publicAPI, model, ['height', 'radius', 'resolution', 'capping']);
+  _macro2.default.setGetArray(publicAPI, model, ['center', 'direction'], 3);
+  _macro2.default.algo(publicAPI, model, 0, 1);
+  vtkConeSource(publicAPI, model);
+}
+
+// ----------------------------------------------------------------------------
+
+var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtkConeSource');
+
+// ----------------------------------------------------------------------------
+
+exports.default = { newInstance: newInstance, extend: extend };
+
+/***/ }),
+/* 116 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
+
+var _glMatrix = __webpack_require__(3);
+
+function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } else { return Array.from(arr); } }
+
+function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
+
+var NoOp = function NoOp(v) {
+  return v;
+};
+
+var IDENTITY = _glMatrix.mat4.create();
+
+var Transform = function () {
+  function Transform() {
+    var useDegre = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
+
+    _classCallCheck(this, Transform);
+
+    this.matrix = _glMatrix.mat4.create();
+    this.tmp = _glMatrix.vec3.create();
+    this.angleConv = useDegre ? _glMatrix.glMatrix.toRadian : NoOp;
+  }
+
+  _createClass(Transform, [{
+    key: 'rotateFromDirections',
+    value: function rotateFromDirections(originDirection, targetDirection) {
+      var src = _glMatrix.vec3.create();
+      var dst = _glMatrix.vec3.create();
+      var transf = _glMatrix.mat4.create();
+
+      _glMatrix.vec3.set(src, originDirection[0], originDirection[1], originDirection[2]);
+      _glMatrix.vec3.set(dst, targetDirection[0], targetDirection[1], targetDirection[2]);
+      _glMatrix.vec3.normalize(src, src);
+      _glMatrix.vec3.normalize(dst, dst);
+      var cosAlpha = _glMatrix.vec3.dot(src, dst);
+      if (cosAlpha >= 1) {
+        return this;
+      }
+
+      _glMatrix.vec3.cross(this.tmp, src, dst);
+      _glMatrix.mat4.fromRotation(transf, Math.acos(cosAlpha), this.tmp);
+      _glMatrix.mat4.multiply(this.matrix, this.matrix, transf);
+
+      return this;
+    }
+  }, {
+    key: 'rotate',
+    value: function rotate(angle, axis) {
+      _glMatrix.vec3.set.apply(_glMatrix.vec3, [this.tmp].concat(_toConsumableArray(axis)));
+      _glMatrix.vec3.normalize(this.tmp, this.tmp);
+      _glMatrix.mat4.rotate(this.matrix, this.matrix, this.angleConv(angle), this.tmp);
+      return this;
+    }
+  }, {
+    key: 'rotateX',
+    value: function rotateX(angle) {
+      _glMatrix.mat4.rotateX(this.matrix, this.matrix, this.angleConv(angle));
+      return this;
+    }
+  }, {
+    key: 'rotateY',
+    value: function rotateY(angle) {
+      _glMatrix.mat4.rotateY(this.matrix, this.matrix, this.angleConv(angle));
+      return this;
+    }
+  }, {
+    key: 'rotateZ',
+    value: function rotateZ(angle) {
+      _glMatrix.mat4.rotateZ(this.matrix, this.matrix, this.angleConv(angle));
+      return this;
+    }
+  }, {
+    key: 'translate',
+    value: function translate(x, y, z) {
+      _glMatrix.vec3.set(this.tmp, x, y, z);
+      _glMatrix.mat4.translate(this.matrix, this.matrix, this.tmp);
+      return this;
+    }
+  }, {
+    key: 'scale',
+    value: function scale(sx, sy, sz) {
+      _glMatrix.vec3.set(this.tmp, sx, sy, sz);
+      _glMatrix.mat4.scale(this.matrix, this.matrix, this.tmp);
+      return this;
+    }
+  }, {
+    key: 'apply',
+    value: function apply(typedArray) {
+      var offset = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
+      var nbIterations = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : -1;
+
+      if (IDENTITY[0] === this.matrix[0] && IDENTITY[1] === this.matrix[1] && IDENTITY[2] === this.matrix[2] && IDENTITY[3] === this.matrix[3] && IDENTITY[4] === this.matrix[4] && IDENTITY[5] === this.matrix[5] && IDENTITY[6] === this.matrix[6] && IDENTITY[7] === this.matrix[7] && IDENTITY[8] === this.matrix[8] && IDENTITY[9] === this.matrix[9] && IDENTITY[10] === this.matrix[10] && IDENTITY[11] === this.matrix[11] && IDENTITY[12] === this.matrix[12] && IDENTITY[13] === this.matrix[13] && IDENTITY[14] === this.matrix[14] && IDENTITY[15] === this.matrix[15]) {
+        // Make sure we can chain apply...
+        return this;
+      }
+
+      var size = nbIterations === -1 ? typedArray.length : offset + nbIterations * 3;
+      for (var i = offset; i < size; i += 3) {
+        _glMatrix.vec3.set(this.tmp, typedArray[i], typedArray[i + 1], typedArray[i + 2]);
+        _glMatrix.vec3.transformMat4(this.tmp, this.tmp, this.matrix);
+        typedArray[i] = this.tmp[0];
+        typedArray[i + 1] = this.tmp[1];
+        typedArray[i + 2] = this.tmp[2];
+      }
+
+      // Make sure we can chain apply...
+      return this;
+    }
+  }, {
+    key: 'getMatrix',
+    value: function getMatrix() {
+      return this.matrix;
+    }
+  }]);
+
+  return Transform;
+}();
+
+function buildFromDegree() {
+  return new Transform(true);
+}
+
+function buildFromRadian() {
+  return new Transform(false);
+}
+
+exports.default = {
+  buildFromDegree: buildFromDegree,
+  buildFromRadian: buildFromRadian
+};
+
+/***/ }),
+/* 117 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -25447,7 +26527,7 @@ var _Math = __webpack_require__(1);
 
 var _Math2 = _interopRequireDefault(_Math);
 
-var _Points = __webpack_require__(26);
+var _Points = __webpack_require__(21);
 
 var _Points2 = _interopRequireDefault(_Points);
 
@@ -25572,14 +26652,14 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend });
 
 /***/ }),
-/* 116 */
+/* 118 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
 Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 /* harmony export (immutable) */ __webpack_exports__["getProteinPair"] = getProteinPair;
 /* harmony export (immutable) */ __webpack_exports__["updateNetworkColor"] = updateNetworkColor;
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_vis__ = __webpack_require__(256);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_vis__ = __webpack_require__(262);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_vis___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0_vis__);
 
 
@@ -25599,8 +26679,11 @@ var nodes = new __WEBPACK_IMPORTED_MODULE_0_vis___default.a.DataSet([
 // create an array with edges
 var edges = new __WEBPACK_IMPORTED_MODULE_0_vis___default.a.DataSet([
   { from: 1, to: 2, label: '0.38', val: 1, color: { color: 'rgb(20,24,200)' } },
+  { from: 2, to: 1, label: '0.38', val: 1, color: { color: 'rgb(20,24,200)' } },
   { from: 1, to: 3, label: '0.03', val: 0.10001, color: { color: 'rgba(30,30,30,0.2)' } },
-  { from: 1, to: 4, label: '0.00', val: 0.00, color: { color: 'rgba(30,30,30,0.2)' } }
+  { from: 3, to: 1, label: '0.38', val: 1, color: { color: 'rgb(20,24,200)' } },
+  { from: 1, to: 4, label: '0.00', val: 0.00, color: { color: 'rgba(30,30,30,0.2)' } },
+  { from: 4, to: 1, label: '0.38', val: 1, color: { color: 'rgb(20,24,200)' } }
 ]);
 
 // create a network
@@ -25628,14 +26711,18 @@ var options = {
     }
   },
   edges: {
-    width: 10,
+    arrows: {
+      to: { enabled: true, scaleFactor: 1, type: 'arrow' }
+    },
+    width: 2,
+    length: 150,
     color: {
       //   color:'#fdb2fc',
       highlight: '#444444'
     },
     font: {
-      size: 20, // px
-      strokeWidth: 4
+      size: 16, // px
+      strokeWidth: 2
     }
   }
 };
@@ -25671,30 +26758,220 @@ function updateNetworkColor() {
 }
 
 /***/ }),
-/* 117 */
-/***/ (function(module, exports, __webpack_require__) {
+/* 119 */
+/***/ (function(module, exports) {
 
-/* WEBPACK VAR INJECTION */(function(global) {module.exports = global["MyWebApp"] = __webpack_require__(118);
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(4)))
+console.log("Init Tutorial");
+
+// Contents of tutorial slides 
+var titles = [
+    "<h2>Quick Tutorial</h2>",
+    "<h2>Viewer</h2>",
+    "<h2>Template</h2>",
+    "<h2>Network</h2>",
+    "<h2>Menu</h2>"];
+
+var descs = [
+    `<p><b>Welcome to Digital aCC</b>. It is an interactive single-neuron imaging platform for 
+        proteome-to-phenome analysis. The nanometer-scale protein interactions and micrometer-scale 
+        cellular morphogenesis are intimately linked with each other. This platform depicts the 
+        neuron volume morphology/complexity with the protein interactions over time.</p>
+        <p>The layout follows the <i>three-pane interface</i> with the menu at the bottom.</p>
+        <p>On the left, it is the <b>Viewer</b> pane. It displays the neuron volume in either 
+        surface or voxel modes. The option of each mode is on the top-left.</p>
+        <p>The <b>Template</b> pane on the top-right shows the compartments of aCC prototype 
+        of different instars.</p>
+        <p>The <b>Network</b> pane on the bottom-right shows the collection of co-expressed 
+        proteins over neurons.</p>`,
+    `<p>The Viewer pane has two modes: surface and voxel.</p>
+        <p>In the surface mode, the boundary of the neuron is displayed as a surface. While, colors encode 
+        the concentration of protein interaction. The <b>Depth</b> parameter adjusts the depth from the surface.
+        <p>The voxel mode displays the inside of neuron volumes using the 
+        <a href="https://en.wikipedia.org/wiki/Volume_rendering" target="_blank">volume rendering technique</a>. 
+        The voxel's opacity can be adjusted using the graph, where Y-axis is the opacity and X-axis is the value
+        of voxels.
+        <center>
+        <table class="tuttab">
+          <tr>
+            <th>Control</th>
+            <th align='left'>Description</th> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/drag.png" alt="left click and drag"></td>
+            <td>Rotate</td> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/shiftdrag.png" alt="shift + left click and drag"></td>
+            <td>Move</td> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/wheel.png" alt="wheel"></td>
+            <td>Zoom in/out</td> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/rightclick.png" alt="right click"></td>
+            <td>Select voxel <br>(only in surface mode)</td> 
+          </tr>
+        </table>
+        </center>
+        `,
+    `<p>The Template pane shows the aCC prototype of the corresponding instar. 
+        The compartment of the selected voxel is highlighted with blue color.</p>
+        <center>
+        <table class="tuttab">
+        <tr>
+            <th>Control</th>
+            <th align='left'>Description</th> 
+        </tr>
+        <tr>
+            <td align="center"><img src="img/drag.png" alt="left click and drag"></td>
+            <td>Rotate</td> 
+        </tr>
+        <tr>
+            <td align="center"><img src="img/wheel.png" alt="wheel"></td>
+            <td>Zoom in/out</td> 
+        </tr>
+        </table>
+        </center>`,
+    `<p>The Network pane displays the protein network. Nodes/vertices are proteins 
+        and edges join pairs of co-localized proteins. The user can select the edge 
+        to see the protein interaction concentration level of corresponding protein 
+        pair (only in surface mode).</p>
+        <center>
+        <table class="tuttab">
+          <tr>
+            <th>Control</th>
+            <th align='left'>Description</th> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/drag.png" alt="left click and drag" valign="middle"> or Arrows</td>
+            <td>Move</td> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/wheel.png" alt="wheel" valign="middle"> or +/-</td>
+            <td>Zoom in/out</td> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/leftclick.png" alt="left click"></td>
+            <td>Select a protein pair</td> 
+          </tr>
+          <tr>
+            <td align="center"><img src="img/zoomExtends.png" alt="fit screen"></td>
+            <td>Fit screen to all nodes</td> 
+          </tr>
+        </table>
+        </center>`,
+    `<p>The menu lets you change the Viewer mode (surface/voxel), neuron, and timestep. </p>
+        <p>Click ? for help. </p>
+        <p>This page uses VTK.js, Vis.js, Three.js, Node.js, Webpack. It was tested on Chrome.</p>`];
+
+// Positions of highlight box
+var hlbox = [
+    ["", "", "", ""],
+    ["5px", "5px", "calc(100vh - 60px)", "calc(50vw - 15px)"],
+    ["5px", "50vw", "calc(50vh - 30px)", "calc(50vw - 15px)"],
+    ["calc(50vh - 20px)", "50vw", "calc(50vh - 40px)", "calc(50vw - 15px)"],
+    ["calc(100vh - 50px)", "5px", "40px", "calc(100vw - 20px)"]];
+// Starting slide
+var slideIndex = 0;
+
+// Get the modal
+var modal = document.getElementById('model-tut');
+// Get the highlight box element
+var hldiv = document.getElementById("tutbox");
+
+// When the user clicks the button, open the modal 
+document.getElementById("helpbtn").onclick = function () {
+    modal.style.display = "block";
+    showSlides(0);
+}
+
+// When the user clicks on <span> (x), close the modal
+document.getElementsByClassName("close")[0].onclick = function () {
+    modal.style.display = "none";
+    hldiv.style.display = "none";
+}
+
+// When the user clicks anywhere outside of the modal, close it
+window.onclick = function (event) {
+    if (event.target == modal) {
+        modal.style.display = "none";
+        hldiv.style.display = "none";
+    }
+}
+
+// When the user clicks on left arrow, go back one slide
+document.getElementsByClassName("prev")[0].onclick = function (event) {
+    showSlides(slideIndex - 1);
+}
+
+// When the user clicks on right arrow, go forward one slide
+document.getElementsByClassName("next")[0].onclick = function (event) {
+    showSlides(slideIndex + 1);
+}
+
+// When the user clicks on dots, go to the corresponding slide
+var tutnav = document.getElementById("tutnav");
+var nextbutton = document.getElementsByClassName("next");
+for (let ii = 0; ii < titles.length; ii++) {
+    var dot = document.createElement('span');
+    dot.classList.add('dot');
+    dot.onclick = function (event) {
+        showSlides(ii);
+    }
+    tutnav.insertBefore(dot, nextbutton[0]);
+}
+
+// show the tutorial slide and the corresponding highlight box
+var slides = document.getElementsByClassName("dot");
+function showSlides(n) {
+    slides[slideIndex].className = "dot";
+    slideIndex = n;
+    if (n >= slides.length) { slideIndex = slides.length - 1 }
+    if (n < 0) { slideIndex = 0 }
+    slides[slideIndex].className = "dot active";
+
+    document.getElementById("modal-title").innerHTML = titles[slideIndex];
+    document.getElementById("modal-desc").innerHTML = descs[slideIndex];
+
+    if (!hlbox[slideIndex][0]) {
+        hldiv.style.display = 'none';
+    } else {
+        hldiv.style.display = 'block';
+        hldiv.style.top = hlbox[slideIndex][0];
+        hldiv.style.left = hlbox[slideIndex][1];
+        hldiv.style.height = hlbox[slideIndex][2];
+        hldiv.style.width = hlbox[slideIndex][3];
+    }
+}
+
+showSlides(0);
 
 /***/ }),
-/* 118 */
+/* 120 */
+/***/ (function(module, exports, __webpack_require__) {
+
+/* WEBPACK VAR INJECTION */(function(global) {module.exports = global["MyWebApp"] = __webpack_require__(121);
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(5)))
+
+/***/ }),
+/* 121 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
 Object.defineProperty(__webpack_exports__, "__esModule", { value: true });
 /* WEBPACK VAR INJECTION */(function(global) {/* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_volumeviewer__ = __webpack_require__(62);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_isoviewer__ = __webpack_require__(114);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_proteinnetwork__ = __webpack_require__(116);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3_template__ = __webpack_require__(61);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4_tutorial__ = __webpack_require__(257);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_proteinnetwork__ = __webpack_require__(118);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3_template__ = __webpack_require__(39);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4_tutorial__ = __webpack_require__(119);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_4_tutorial___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_4_tutorial__);
 
 
 
 
 
-new Promise(function(resolve) { resolve(); }).then(function() {[__webpack_require__(62), __webpack_require__(114), __webpack_require__(116)];}).catch(__webpack_require__.oe);
+new Promise(function(resolve) { resolve(); }).then(function() {[__webpack_require__(62), __webpack_require__(114), __webpack_require__(118), __webpack_require__(39), __webpack_require__(119)];}).catch(__webpack_require__.oe);
 
 // ----------------------------------------------------------------------------
 // Function for getting filename
@@ -25706,7 +26983,7 @@ function getFileName(type, protein) {
 
   volumetime = volumetime.length >= 3 ? volumetime : new Array(3 - volumetime.length + 1).join('0') + volumetime;
   if (protein === undefined) {
-      // protein was not passed
+    // protein was not passed
     if (type == "INTENSITY") {
       return './data/volume/' + volumename + '/t' + volumetime + '/intensity/' + volumename + '.vti';
     } else if (type == "DISTANCE") {
@@ -25760,9 +27037,22 @@ volumelist.onreadystatechange = function () {
       Object(__WEBPACK_IMPORTED_MODULE_1_isoviewer__["viewIsoSurface"])(getFileName("DISTANCE"), 'isorenderer');
       // updateProteinPair(getFileName(null, ['Cdc42', 'WASp']));
       Object(__WEBPACK_IMPORTED_MODULE_1_isoviewer__["loadLabel"])(getFileName("LABEL"));
-      
+
       // Show isosurface first
       document.querySelector('#volumerenderer').style.display = "none";
+
+      // Add tooltip
+      $('.hasTooltip').each(function () { // Notice the .each() loop, discussed below
+        $(this).qtip({
+          content: { text: $(this).next('div') }, // Use the "div" element next to this for the content
+          position: {
+            target: 'mouse', // Use the mouse position as the position origin
+            adjust: { mouse: true }
+          },
+          style: { classes: 'mytooltip' },
+          show: { solo: true }
+        });
+      });
     }
   }
 }
@@ -25780,7 +27070,7 @@ selectedvolume.onchange = function () {
   volumetime.max = voltimenum[vid];
   volumetime.value = 1;
   document.getElementById('volumetimeId').value = volumetime.value;
-  document.getElementById('volumetimeMaxId').value = volumetime.max; 
+  document.getElementById('volumetimeMaxId').value = volumetime.max;
 
   var viewmode = document.getElementById("viewmode").value;
   if (viewmode == "VolumeRender") {
@@ -25836,27 +27126,26 @@ document.getElementById("volumetime").onchange = function () {
 // Network
 window.network.on("click", function (params) {
   var pair = Object(__WEBPACK_IMPORTED_MODULE_2_proteinnetwork__["getProteinPair"])();
-  if (!(pair === undefined)) {
+  var viewmode = document.getElementById("viewmode").value;
+  if (!(pair === undefined) && viewmode == "IsoSurface") {
     Object(__WEBPACK_IMPORTED_MODULE_1_isoviewer__["updateProteinPair"])(getFileName(null, pair));
   }
 });
 
-
-
-/* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(4)))
+/* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(5)))
 
 /***/ }),
-/* 119 */
+/* 122 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 
 
-var zlib_deflate = __webpack_require__(120);
+var zlib_deflate = __webpack_require__(123);
 var utils        = __webpack_require__(11);
 var strings      = __webpack_require__(66);
-var msg          = __webpack_require__(39);
+var msg          = __webpack_require__(41);
 var ZStream      = __webpack_require__(67);
 
 var toString = Object.prototype.toString;
@@ -26253,17 +27542,17 @@ exports.gzip = gzip;
 
 
 /***/ }),
-/* 120 */
+/* 123 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 
 var utils   = __webpack_require__(11);
-var trees   = __webpack_require__(121);
+var trees   = __webpack_require__(124);
 var adler32 = __webpack_require__(64);
 var crc32   = __webpack_require__(65);
-var msg     = __webpack_require__(39);
+var msg     = __webpack_require__(41);
 
 /* Public constants ==========================================================*/
 /* ===========================================================================*/
@@ -28115,7 +29404,7 @@ exports.deflateTune = deflateTune;
 
 
 /***/ }),
-/* 121 */
+/* 124 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -29324,20 +30613,20 @@ exports._tr_align = _tr_align;
 
 
 /***/ }),
-/* 122 */
+/* 125 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 
 
-var zlib_inflate = __webpack_require__(123);
+var zlib_inflate = __webpack_require__(126);
 var utils        = __webpack_require__(11);
 var strings      = __webpack_require__(66);
 var c            = __webpack_require__(68);
-var msg          = __webpack_require__(39);
+var msg          = __webpack_require__(41);
 var ZStream      = __webpack_require__(67);
-var GZheader     = __webpack_require__(126);
+var GZheader     = __webpack_require__(129);
 
 var toString = Object.prototype.toString;
 
@@ -29749,7 +31038,7 @@ exports.ungzip  = inflate;
 
 
 /***/ }),
-/* 123 */
+/* 126 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -29759,8 +31048,8 @@ exports.ungzip  = inflate;
 var utils         = __webpack_require__(11);
 var adler32       = __webpack_require__(64);
 var crc32         = __webpack_require__(65);
-var inflate_fast  = __webpack_require__(124);
-var inflate_table = __webpack_require__(125);
+var inflate_fast  = __webpack_require__(127);
+var inflate_table = __webpack_require__(128);
 
 var CODES = 0;
 var LENS = 1;
@@ -31294,7 +32583,7 @@ exports.inflateUndermine = inflateUndermine;
 
 
 /***/ }),
-/* 124 */
+/* 127 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -31627,7 +32916,7 @@ module.exports = function inflate_fast(strm, start) {
 
 
 /***/ }),
-/* 125 */
+/* 128 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -31961,7 +33250,7 @@ module.exports = function inflate_table(type, lens, lens_index, codes, table, ta
 
 
 /***/ }),
-/* 126 */
+/* 129 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -32008,7 +33297,7 @@ module.exports = GZheader;
 
 
 /***/ }),
-/* 127 */
+/* 130 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -32019,11 +33308,11 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.extend = extend;
 
-var _pako = __webpack_require__(21);
+var _pako = __webpack_require__(23);
 
 var _pako2 = _interopRequireDefault(_pako);
 
-var _base64Js = __webpack_require__(41);
+var _base64Js = __webpack_require__(43);
 
 var _DataAccessHelper = __webpack_require__(70);
 
@@ -32033,9 +33322,13 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _DataArray = __webpack_require__(5);
+var _DataArray = __webpack_require__(4);
 
 var _DataArray2 = _interopRequireDefault(_DataArray);
+
+var _BinaryHelper = __webpack_require__(183);
+
+var _BinaryHelper2 = _interopRequireDefault(_BinaryHelper);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -32050,6 +33343,13 @@ function stringToXML(xmlStr) {
     return oXML;
   }
   return new DOMParser().parseFromString(xmlStr, 'application/xml');
+}
+
+function extractAppendedData(buffer) {
+  // search for appended data tag
+  var prefixRegex = /^\s*<AppendedData\s+encoding="raw">\s*_/m;
+  var suffixRegex = /\n\s*<\/AppendedData>/m;
+  return _BinaryHelper2.default.extractBinary(buffer, prefixRegex, suffixRegex);
 }
 
 // ----------------------------------------------------------------------------
@@ -32132,10 +33432,10 @@ function uncompressBlock(compressedUint8, output) {
 
 // ----------------------------------------------------------------------------
 
-function processDataArray(size, dataArrayElem, compressor, byteOrder, headerType) {
+function processDataArray(size, dataArrayElem, compressor, byteOrder, headerType, binaryBuffer) {
   var dataType = dataArrayElem.getAttribute('type');
   var name = dataArrayElem.getAttribute('Name');
-  var format = dataArrayElem.getAttribute('format'); // binary, ascii, [appended: not supported]
+  var format = dataArrayElem.getAttribute('format'); // binary, ascii, appended
   var numberOfComponents = Number(dataArrayElem.getAttribute('NumberOfComponents') || '1');
   var values = null;
 
@@ -32189,6 +33489,33 @@ function processDataArray(size, dataArrayElem, compressor, byteOrder, headerType
         values = integer64to32(values);
       }
     }
+  } else if (format === 'appended') {
+    var _offset3 = Number(dataArrayElem.getAttribute('offset'));
+    // read header
+    // NOTE: this will incorrectly read the size if headerType is (U)Int64 and
+    // the value requires (U)Int64.
+    var _header = new TYPED_ARRAY[headerType](binaryBuffer, _offset3, 1);
+    var arraySize = _header[0] / TYPED_ARRAY_BYTES[dataType];
+
+    // if we are dealing with Uint64, we need to get double the values since
+    // TYPED_ARRAY[Uint64] is Uint32.
+    if (dataType.indexOf('Int64') !== -1) {
+      arraySize *= 2;
+    }
+
+    _offset3 += TYPED_ARRAY_BYTES[headerType];
+
+    // read values
+    // if offset is aligned to dataType, use view. Otherwise, slice due to misalignment.
+    if (_offset3 % TYPED_ARRAY_BYTES[dataType] === 0) {
+      values = new TYPED_ARRAY[dataType](binaryBuffer, _offset3, arraySize);
+    } else {
+      values = new TYPED_ARRAY[dataType](binaryBuffer.slice(_offset3, _offset3 + _header[0]));
+    }
+    // remove higher order 32 bits assuming they're not used.
+    if (dataType.indexOf('Int64') !== -1) {
+      values = integer64to32(values);
+    }
   } else {
     console.error('Format not supported', format);
   }
@@ -32198,7 +33525,7 @@ function processDataArray(size, dataArrayElem, compressor, byteOrder, headerType
 
 // ----------------------------------------------------------------------------
 
-function processCells(size, containerElem, compressor, byteOrder, headerType) {
+function processCells(size, containerElem, compressor, byteOrder, headerType, binaryBuffer) {
   var arrayElems = {};
   var dataArrayElems = containerElem.getElementsByTagName('DataArray');
   for (var elIdx = 0; elIdx < dataArrayElems.length; elIdx++) {
@@ -32206,9 +33533,9 @@ function processCells(size, containerElem, compressor, byteOrder, headerType) {
     arrayElems[el.getAttribute('Name')] = el;
   }
 
-  var offsets = processDataArray(size, arrayElems.offsets, compressor, byteOrder, headerType).values;
+  var offsets = processDataArray(size, arrayElems.offsets, compressor, byteOrder, headerType, binaryBuffer).values;
   var connectivitySize = offsets[offsets.length - 1];
-  var connectivity = processDataArray(connectivitySize, arrayElems.connectivity, compressor, byteOrder, headerType).values;
+  var connectivity = processDataArray(connectivitySize, arrayElems.connectivity, compressor, byteOrder, headerType, binaryBuffer).values;
   var values = new Uint32Array(size + connectivitySize);
   var writeOffset = 0;
   var previousOffset = 0;
@@ -32229,7 +33556,7 @@ function processCells(size, containerElem, compressor, byteOrder, headerType) {
 
 // ----------------------------------------------------------------------------
 
-function processFieldData(size, fieldElem, fieldContainer, compressor, byteOrder, headerType) {
+function processFieldData(size, fieldElem, fieldContainer, compressor, byteOrder, headerType, binaryBuffer) {
   if (fieldElem) {
     var attributes = ['Scalars', 'Vectors', 'Normals', 'Tensors', 'TCoords'];
     var nameBinding = {};
@@ -32244,7 +33571,7 @@ function processFieldData(size, fieldElem, fieldContainer, compressor, byteOrder
     var nbArrays = arrays.length;
     for (var idx = 0; idx < nbArrays; idx++) {
       var array = arrays[idx];
-      var dataArray = _DataArray2.default.newInstance(processDataArray(size, array, compressor, byteOrder, headerType));
+      var dataArray = _DataArray2.default.newInstance(processDataArray(size, array, compressor, byteOrder, headerType, binaryBuffer));
       var name = dataArray.getName();
       (nameBinding[name] || fieldContainer.addArray)(dataArray);
     }
@@ -32267,10 +33594,13 @@ function vtkXMLReader(publicAPI, model) {
   // Internal method to fetch Array
   function fetchData(url) {
     var option = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : {};
+    var compression = model.compression,
+        progressCallback = model.progressCallback;
 
-    var compression = model.compression;
-    var progressCallback = model.progressCallback;
-    return model.dataAccessHelper.fetchText(publicAPI, url, { compression: compression, progressCallback: progressCallback });
+    return model.dataAccessHelper.fetchText(publicAPI, url, {
+      compression: compression,
+      progressCallback: progressCallback
+    });
   }
 
   // Set DataSet url
@@ -32299,17 +33629,22 @@ function vtkXMLReader(publicAPI, model) {
     return promise;
   };
 
-  publicAPI.parse = function (content) {
-    if (!content) {
+  publicAPI.parseArrayBuffer = function (arrayBuffer) {
+    if (!arrayBuffer) {
       return;
     }
-    if (content !== model.parseData) {
+    if (arrayBuffer !== model.rawDataBuffer) {
       publicAPI.modified();
     } else {
       return;
     }
 
-    model.parseData = content;
+    var _extractAppendedData = extractAppendedData(arrayBuffer),
+        content = _extractAppendedData.text,
+        binaryBuffer = _extractAppendedData.binaryBuffer;
+
+    model.rawDataBuffer = arrayBuffer;
+    model.binaryBuffer = binaryBuffer;
 
     // Parse data here...
     var doc = stringToXML(content);
@@ -32317,7 +33652,8 @@ function vtkXMLReader(publicAPI, model) {
     var type = rootElem.getAttribute('type');
     var compressor = rootElem.getAttribute('compressor');
     var byteOrder = rootElem.getAttribute('byte_order');
-    var headerType = rootElem.getAttribute('header_type');
+    // default to UInt32. I think version 0.1 vtp/vti files default to UInt32.
+    var headerType = rootElem.getAttribute('header_type') || 'UInt32';
 
     if (compressor && compressor !== 'vtkZLibDataCompressor') {
       console.error('Invalid compressor', compressor);
@@ -32334,11 +33670,118 @@ function vtkXMLReader(publicAPI, model) {
       return;
     }
 
+    // appended format
+    if (rootElem.querySelector('AppendedData')) {
+      var appendedDataElem = rootElem.querySelector('AppendedData');
+      var encoding = appendedDataElem.getAttribute('encoding');
+      // Only get data arrays that are descendants of <Piece />
+      // We don't parse DataArrays from FieldData right now.
+      var arrayElems = rootElem.querySelectorAll('Piece DataArray');
+
+      var appendedBuffer = model.binaryBuffer;
+
+      if (encoding === 'base64') {
+        // substr(1) is to remove the '_' prefix
+        appendedBuffer = appendedDataElem.textContent.trim().substr(1);
+      }
+
+      // get data array chunks
+      var dataArrays = [];
+      for (var i = 0; i < arrayElems.length; ++i) {
+        var offset = Number(arrayElems[i].getAttribute('offset'));
+        var nextOffset = 0;
+        if (i === arrayElems.length - 1) {
+          nextOffset = appendedBuffer.length;
+        } else {
+          nextOffset = Number(arrayElems[i + 1].getAttribute('offset'));
+        }
+
+        if (encoding === 'base64') {
+          dataArrays.push((0, _base64Js.toByteArray)(appendedBuffer.substring(offset, nextOffset)));
+        } else {
+          // encoding === 'raw'
+          // Need to slice the ArrayBuffer so readerHeader() works properly
+          dataArrays.push(new Uint8Array(appendedBuffer.slice(offset, nextOffset)));
+        }
+      }
+
+      if (compressor === 'vtkZLibDataCompressor') {
+        for (var arrayidx = 0; arrayidx < dataArrays.length; ++arrayidx) {
+          var dataArray = dataArrays[arrayidx];
+
+          // Header reading
+          // Refer to processDataArray() above for info on header fields
+          var header = readerHeader(dataArray, headerType);
+          var nbBlocks = header[1];
+          var compressedOffset = dataArray.length - (header.reduce(function (a, b) {
+            return a + b;
+          }, 0) - (header[0] + header[1] + header[2] + header[3]));
+
+          var _buffer = null;
+          if (nbBlocks > 0) {
+            // If the last block's size is labeled as 0, that means the last block
+            // really has size header[2].
+            if (header[3] === 0) {
+              _buffer = new ArrayBuffer(header[2] * nbBlocks);
+            } else {
+              _buffer = new ArrayBuffer(header[2] * (nbBlocks - 1) + header[3]);
+            }
+          } else {
+            // if there is no blocks, then default to a zero array of size 0.
+            _buffer = new ArrayBuffer(0);
+          }
+
+          // uncompressed buffer
+          var uncompressed = new Uint8Array(_buffer);
+          var output = {
+            offset: 0,
+            uint8: uncompressed
+          };
+
+          for (var _i2 = 0; _i2 < nbBlocks; _i2++) {
+            var blockSize = header[4 + _i2];
+            var compressedBlock = new Uint8Array(dataArray.buffer, compressedOffset, blockSize);
+            uncompressBlock(compressedBlock, output);
+            compressedOffset += blockSize;
+          }
+
+          var data = new Uint8Array(uncompressed.length + TYPED_ARRAY_BYTES[headerType]);
+          // set length header
+          // TODO this does not work for lengths that are greater than the max Uint32 value.
+          new TYPED_ARRAY[headerType](data.buffer, 0, 1)[0] = uncompressed.length;
+          data.set(uncompressed, TYPED_ARRAY_BYTES[headerType]);
+
+          dataArrays[arrayidx] = data;
+        }
+      }
+
+      var bufferLength = dataArrays.reduce(function (acc, arr) {
+        return acc + arr.length;
+      }, 0);
+      var buffer = new ArrayBuffer(bufferLength);
+      var view = new Uint8Array(buffer);
+
+      for (var _i3 = 0, _offset4 = 0; _i3 < dataArrays.length; ++_i3) {
+        // set correct offsets
+        arrayElems[_i3].setAttribute('offset', _offset4);
+        // set final buffer data
+        view.set(dataArrays[_i3], _offset4);
+        _offset4 += dataArrays[_i3].length;
+      }
+
+      model.binaryBuffer = buffer;
+
+      if (!model.binaryBuffer) {
+        console.error('Processing appended data format: requires binaryBuffer to parse');
+        return;
+      }
+    }
+
     publicAPI.parseXML(rootElem, type, compressor, byteOrder, headerType);
   };
 
   publicAPI.requestData = function (inData, outData) {
-    publicAPI.parse(model.parseData);
+    publicAPI.parseArrayBuffer(model.rawDataBuffer);
   };
 }
 
@@ -32354,7 +33797,6 @@ var DEFAULT_VALUES = {
 
 // ----------------------------------------------------------------------------
 
-
 function extend(publicAPI, model) {
   var initialValues = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
 
@@ -32368,6 +33810,14 @@ function extend(publicAPI, model) {
 
   // vtkXMLReader methods
   vtkXMLReader(publicAPI, model);
+
+  // To support destructuring
+  if (!model.compression) {
+    model.compression = null;
+  }
+  if (!model.progressCallback) {
+    model.progressCallback = null;
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -32375,7 +33825,7 @@ function extend(publicAPI, model) {
 exports.default = { extend: extend, processDataArray: processDataArray, processFieldData: processFieldData, processCells: processCells };
 
 /***/ }),
-/* 128 */
+/* 131 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -32385,9 +33835,9 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 
-var _base64Js = __webpack_require__(41);
+var _base64Js = __webpack_require__(43);
 
-var _pako = __webpack_require__(21);
+var _pako = __webpack_require__(23);
 
 var _pako2 = _interopRequireDefault(_pako);
 
@@ -32395,7 +33845,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _Endian = __webpack_require__(40);
+var _Endian = __webpack_require__(42);
 
 var _Endian2 = _interopRequireDefault(_Endian);
 
@@ -32426,7 +33876,7 @@ function fetchText() {
   return new Promise(function (resolve, reject) {
     var txt = getContent(url);
     if (txt === null) {
-      reject('No such text ' + url);
+      reject(new Error('No such text ' + url));
     } else {
       resolve(txt);
     }
@@ -32441,7 +33891,7 @@ function fetchJSON() {
   return new Promise(function (resolve, reject) {
     var txt = getContent(removeLeadingSlash(url));
     if (txt === null) {
-      reject('No such JSON ' + url);
+      reject(new Error('No such JSON ' + url));
     } else {
       resolve(JSON.parse(txt));
     }
@@ -32459,7 +33909,7 @@ function fetchArray() {
 
     var txt = getContent(url);
     if (txt === null) {
-      reject('No such array ' + url);
+      reject(new Error('No such array ' + url));
     } else {
       if (array.dataType === 'string') {
         var bText = atob(txt);
@@ -32478,7 +33928,9 @@ function fetchArray() {
 
         if (options.compression) {
           if (array.dataType === 'string' || array.dataType === 'JSON') {
-            array.buffer = _pako2.default.inflate(new Uint8Array(array.buffer), { to: 'string' });
+            array.buffer = _pako2.default.inflate(new Uint8Array(array.buffer), {
+              to: 'string'
+            });
           } else {
             array.buffer = _pako2.default.inflate(new Uint8Array(array.buffer)).buffer;
           }
@@ -32523,7 +33975,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 129 */
+/* 132 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -32533,11 +33985,11 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 
-var _jszip = __webpack_require__(130);
+var _jszip = __webpack_require__(133);
 
 var _jszip2 = _interopRequireDefault(_jszip);
 
-var _pako = __webpack_require__(21);
+var _pako = __webpack_require__(23);
 
 var _pako2 = _interopRequireDefault(_pako);
 
@@ -32545,7 +33997,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _Endian = __webpack_require__(40);
+var _Endian = __webpack_require__(42);
 
 var _Endian2 = _interopRequireDefault(_Endian);
 
@@ -32567,7 +34019,9 @@ function handleUint8Array(array, compression, done) {
 
     if (compression) {
       if (array.dataType === 'string' || array.dataType === 'JSON') {
-        array.buffer = _pako2.default.inflate(new Uint8Array(array.buffer), { to: 'string' });
+        array.buffer = _pako2.default.inflate(new Uint8Array(array.buffer), {
+          to: 'string'
+        });
       } else {
         array.buffer = _pako2.default.inflate(new Uint8Array(array.buffer)).buffer;
       }
@@ -32690,20 +34144,14 @@ function create(createOptions) {
         if (options.compression === 'gz') {
           return zipRoot.file(path).async('uint8array').then(function (uint8array) {
             var str = _pako2.default.inflate(uint8array, { to: 'string' });
-            return new Promise(function (ok) {
-              return ok(JSON.parse(str));
-            });
+            return Promise.resolve(JSON.parse(str));
           });
         }
-        return new Promise(function (a, r) {
-          return r('Invalid compression');
-        });
+        return Promise.reject(new Error('Invalid compression'));
       }
 
       return zipRoot.file(path).async('string').then(function (str) {
-        return new Promise(function (ok) {
-          return ok(JSON.parse(str));
-        });
+        return Promise.resolve(JSON.parse(str));
       });
     },
     fetchText: function fetchText() {
@@ -32720,20 +34168,14 @@ function create(createOptions) {
         if (options.compression === 'gz') {
           return zipRoot.file(path).async('uint8array').then(function (uint8array) {
             var str = _pako2.default.inflate(uint8array, { to: 'string' });
-            return new Promise(function (ok) {
-              return ok(str);
-            });
+            return Promise.resolve(str);
           });
         }
-        return new Promise(function (a, r) {
-          return r('Invalid compression');
-        });
+        return Promise.reject(new Error('Invalid compression'));
       }
 
       return zipRoot.file(path).async('string').then(function (str) {
-        return new Promise(function (ok) {
-          return ok(str);
-        });
+        return Promise.resolve(str);
       });
     }
   };
@@ -32744,7 +34186,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 130 */
+/* 133 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -32785,8 +34227,8 @@ function JSZip() {
         return newObj;
     };
 }
-JSZip.prototype = __webpack_require__(131);
-JSZip.prototype.loadAsync = __webpack_require__(166);
+JSZip.prototype = __webpack_require__(134);
+JSZip.prototype.loadAsync = __webpack_require__(169);
 JSZip.support = __webpack_require__(12);
 JSZip.defaults = __webpack_require__(85);
 
@@ -32798,12 +34240,12 @@ JSZip.loadAsync = function (content, options) {
     return new JSZip().loadAsync(content, options);
 };
 
-JSZip.external = __webpack_require__(23);
+JSZip.external = __webpack_require__(25);
 module.exports = JSZip;
 
 
 /***/ }),
-/* 131 */
+/* 134 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -32813,11 +34255,11 @@ var utils = __webpack_require__(2);
 var GenericWorker = __webpack_require__(7);
 var StreamHelper = __webpack_require__(84);
 var defaults = __webpack_require__(85);
-var CompressedObject = __webpack_require__(48);
-var ZipObject = __webpack_require__(161);
-var generate = __webpack_require__(162);
-var nodejsUtils = __webpack_require__(29);
-var NodejsStreamInputAdapter = __webpack_require__(165);
+var CompressedObject = __webpack_require__(50);
+var ZipObject = __webpack_require__(164);
+var generate = __webpack_require__(165);
+var nodejsUtils = __webpack_require__(30);
+var NodejsStreamInputAdapter = __webpack_require__(168);
 
 
 /**
@@ -33199,7 +34641,7 @@ module.exports = out;
 
 
 /***/ }),
-/* 132 */
+/* 135 */
 /***/ (function(module, exports) {
 
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
@@ -33289,7 +34731,7 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
 
 
 /***/ }),
-/* 133 */
+/* 136 */
 /***/ (function(module, exports, __webpack_require__) {
 
 // Copyright Joyent, Inc. and other Node contributors.
@@ -33315,15 +34757,15 @@ exports.write = function (buffer, value, offset, isLE, mLen, nBytes) {
 
 module.exports = Stream;
 
-var EE = __webpack_require__(42).EventEmitter;
+var EE = __webpack_require__(44).EventEmitter;
 var inherits = __webpack_require__(18);
 
 inherits(Stream, EE);
-Stream.Readable = __webpack_require__(43);
-Stream.Writable = __webpack_require__(139);
-Stream.Duplex = __webpack_require__(140);
-Stream.Transform = __webpack_require__(141);
-Stream.PassThrough = __webpack_require__(142);
+Stream.Readable = __webpack_require__(45);
+Stream.Writable = __webpack_require__(142);
+Stream.Duplex = __webpack_require__(143);
+Stream.Transform = __webpack_require__(144);
+Stream.PassThrough = __webpack_require__(145);
 
 // Backwards-compat with node 0.4.x
 Stream.Stream = Stream;
@@ -33422,13 +34864,13 @@ Stream.prototype.pipe = function(dest, options) {
 
 
 /***/ }),
-/* 134 */
+/* 137 */
 /***/ (function(module, exports) {
 
 /* (ignored) */
 
 /***/ }),
-/* 135 */
+/* 138 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -33438,7 +34880,7 @@ Stream.prototype.pipe = function(dest, options) {
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
-var Buffer = __webpack_require__(44).Buffer;
+var Buffer = __webpack_require__(46).Buffer;
 /*</replacement>*/
 
 function copyBuffer(src, target, offset) {
@@ -33508,7 +34950,7 @@ module.exports = function () {
 }();
 
 /***/ }),
-/* 136 */
+/* 139 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* WEBPACK VAR INJECTION */(function(global, process) {(function (global, undefined) {
@@ -33698,10 +35140,10 @@ module.exports = function () {
     attachTo.clearImmediate = clearImmediate;
 }(typeof self === "undefined" ? typeof global === "undefined" ? this : global : self));
 
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(4), __webpack_require__(27)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(5), __webpack_require__(28)))
 
 /***/ }),
-/* 137 */
+/* 140 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* WEBPACK VAR INJECTION */(function(global) {
@@ -33772,10 +35214,10 @@ function config (name) {
   return String(val).toLowerCase() === 'true';
 }
 
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(4)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(5)))
 
 /***/ }),
-/* 138 */
+/* 141 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -33811,7 +35253,7 @@ module.exports = PassThrough;
 var Transform = __webpack_require__(78);
 
 /*<replacement>*/
-var util = __webpack_require__(22);
+var util = __webpack_require__(24);
 util.inherits = __webpack_require__(18);
 /*</replacement>*/
 
@@ -33828,47 +35270,47 @@ PassThrough.prototype._transform = function (chunk, encoding, cb) {
 };
 
 /***/ }),
-/* 139 */
-/***/ (function(module, exports, __webpack_require__) {
-
-module.exports = __webpack_require__(45);
-
-
-/***/ }),
-/* 140 */
-/***/ (function(module, exports, __webpack_require__) {
-
-module.exports = __webpack_require__(15);
-
-
-/***/ }),
-/* 141 */
-/***/ (function(module, exports, __webpack_require__) {
-
-module.exports = __webpack_require__(43).Transform
-
-
-/***/ }),
 /* 142 */
 /***/ (function(module, exports, __webpack_require__) {
 
-module.exports = __webpack_require__(43).PassThrough
+module.exports = __webpack_require__(47);
 
 
 /***/ }),
 /* 143 */
 /***/ (function(module, exports, __webpack_require__) {
 
-__webpack_require__(144);
-module.exports = __webpack_require__(80).setImmediate;
+module.exports = __webpack_require__(15);
 
 
 /***/ }),
 /* 144 */
 /***/ (function(module, exports, __webpack_require__) {
 
-var $export = __webpack_require__(145);
-var $task = __webpack_require__(153);
+module.exports = __webpack_require__(45).Transform
+
+
+/***/ }),
+/* 145 */
+/***/ (function(module, exports, __webpack_require__) {
+
+module.exports = __webpack_require__(45).PassThrough
+
+
+/***/ }),
+/* 146 */
+/***/ (function(module, exports, __webpack_require__) {
+
+__webpack_require__(147);
+module.exports = __webpack_require__(80).setImmediate;
+
+
+/***/ }),
+/* 147 */
+/***/ (function(module, exports, __webpack_require__) {
+
+var $export = __webpack_require__(148);
+var $task = __webpack_require__(156);
 $export($export.G + $export.B, {
   setImmediate: $task.set,
   clearImmediate: $task.clear
@@ -33876,13 +35318,13 @@ $export($export.G + $export.B, {
 
 
 /***/ }),
-/* 145 */
+/* 148 */
 /***/ (function(module, exports, __webpack_require__) {
 
-var global = __webpack_require__(30);
+var global = __webpack_require__(31);
 var core = __webpack_require__(80);
 var ctx = __webpack_require__(81);
-var hide = __webpack_require__(147);
+var hide = __webpack_require__(150);
 var PROTOTYPE = 'prototype';
 
 var $export = function (type, name, source) {
@@ -33943,7 +35385,7 @@ module.exports = $export;
 
 
 /***/ }),
-/* 146 */
+/* 149 */
 /***/ (function(module, exports) {
 
 module.exports = function (it) {
@@ -33953,12 +35395,12 @@ module.exports = function (it) {
 
 
 /***/ }),
-/* 147 */
+/* 150 */
 /***/ (function(module, exports, __webpack_require__) {
 
-var dP = __webpack_require__(148);
-var createDesc = __webpack_require__(152);
-module.exports = __webpack_require__(47) ? function (object, key, value) {
+var dP = __webpack_require__(151);
+var createDesc = __webpack_require__(155);
+module.exports = __webpack_require__(49) ? function (object, key, value) {
   return dP.f(object, key, createDesc(1, value));
 } : function (object, key, value) {
   object[key] = value;
@@ -33967,15 +35409,15 @@ module.exports = __webpack_require__(47) ? function (object, key, value) {
 
 
 /***/ }),
-/* 148 */
+/* 151 */
 /***/ (function(module, exports, __webpack_require__) {
 
-var anObject = __webpack_require__(149);
-var IE8_DOM_DEFINE = __webpack_require__(150);
-var toPrimitive = __webpack_require__(151);
+var anObject = __webpack_require__(152);
+var IE8_DOM_DEFINE = __webpack_require__(153);
+var toPrimitive = __webpack_require__(154);
 var dP = Object.defineProperty;
 
-exports.f = __webpack_require__(47) ? Object.defineProperty : function defineProperty(O, P, Attributes) {
+exports.f = __webpack_require__(49) ? Object.defineProperty : function defineProperty(O, P, Attributes) {
   anObject(O);
   P = toPrimitive(P, true);
   anObject(Attributes);
@@ -33989,10 +35431,10 @@ exports.f = __webpack_require__(47) ? Object.defineProperty : function definePro
 
 
 /***/ }),
-/* 149 */
+/* 152 */
 /***/ (function(module, exports, __webpack_require__) {
 
-var isObject = __webpack_require__(46);
+var isObject = __webpack_require__(48);
 module.exports = function (it) {
   if (!isObject(it)) throw TypeError(it + ' is not an object!');
   return it;
@@ -34000,20 +35442,20 @@ module.exports = function (it) {
 
 
 /***/ }),
-/* 150 */
+/* 153 */
 /***/ (function(module, exports, __webpack_require__) {
 
-module.exports = !__webpack_require__(47) && !__webpack_require__(82)(function () {
+module.exports = !__webpack_require__(49) && !__webpack_require__(82)(function () {
   return Object.defineProperty(__webpack_require__(83)('div'), 'a', { get: function () { return 7; } }).a != 7;
 });
 
 
 /***/ }),
-/* 151 */
+/* 154 */
 /***/ (function(module, exports, __webpack_require__) {
 
 // 7.1.1 ToPrimitive(input [, PreferredType])
-var isObject = __webpack_require__(46);
+var isObject = __webpack_require__(48);
 // instead of the ES6 spec version, we didn't implement @@toPrimitive case
 // and the second argument - flag - preferred type is a string
 module.exports = function (it, S) {
@@ -34027,7 +35469,7 @@ module.exports = function (it, S) {
 
 
 /***/ }),
-/* 152 */
+/* 155 */
 /***/ (function(module, exports) {
 
 module.exports = function (bitmap, value) {
@@ -34041,14 +35483,14 @@ module.exports = function (bitmap, value) {
 
 
 /***/ }),
-/* 153 */
+/* 156 */
 /***/ (function(module, exports, __webpack_require__) {
 
 var ctx = __webpack_require__(81);
-var invoke = __webpack_require__(154);
-var html = __webpack_require__(155);
+var invoke = __webpack_require__(157);
+var html = __webpack_require__(158);
 var cel = __webpack_require__(83);
-var global = __webpack_require__(30);
+var global = __webpack_require__(31);
 var process = global.process;
 var setTask = global.setImmediate;
 var clearTask = global.clearImmediate;
@@ -34087,7 +35529,7 @@ if (!setTask || !clearTask) {
     delete queue[id];
   };
   // Node.js 0.8-
-  if (__webpack_require__(156)(process) == 'process') {
+  if (__webpack_require__(159)(process) == 'process') {
     defer = function (id) {
       process.nextTick(ctx(run, id, 1));
     };
@@ -34131,7 +35573,7 @@ module.exports = {
 
 
 /***/ }),
-/* 154 */
+/* 157 */
 /***/ (function(module, exports) {
 
 // fast apply, http://jsperf.lnkit.com/fast-apply/5
@@ -34153,15 +35595,15 @@ module.exports = function (fn, args, that) {
 
 
 /***/ }),
-/* 155 */
+/* 158 */
 /***/ (function(module, exports, __webpack_require__) {
 
-var document = __webpack_require__(30).document;
+var document = __webpack_require__(31).document;
 module.exports = document && document.documentElement;
 
 
 /***/ }),
-/* 156 */
+/* 159 */
 /***/ (function(module, exports) {
 
 var toString = {}.toString;
@@ -34172,12 +35614,12 @@ module.exports = function (it) {
 
 
 /***/ }),
-/* 157 */
+/* 160 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
-var immediate = __webpack_require__(158);
+var immediate = __webpack_require__(161);
 
 /* istanbul ignore next */
 function INTERNAL() {}
@@ -34432,7 +35874,7 @@ function race(iterable) {
 
 
 /***/ }),
-/* 158 */
+/* 161 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -34506,10 +35948,10 @@ function immediate(task) {
   }
 }
 
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(4)))
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(5)))
 
 /***/ }),
-/* 159 */
+/* 162 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -34542,7 +35984,7 @@ module.exports = ConvertWorker;
 
 
 /***/ }),
-/* 160 */
+/* 163 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -34591,7 +36033,7 @@ module.exports = NodejsStreamOutputAdapter;
 
 
 /***/ }),
-/* 161 */
+/* 164 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -34600,7 +36042,7 @@ module.exports = NodejsStreamOutputAdapter;
 var StreamHelper = __webpack_require__(84);
 var DataWorker = __webpack_require__(86);
 var utf8 = __webpack_require__(16);
-var CompressedObject = __webpack_require__(48);
+var CompressedObject = __webpack_require__(50);
 var GenericWorker = __webpack_require__(7);
 
 /**
@@ -34722,14 +36164,14 @@ module.exports = ZipObject;
 
 
 /***/ }),
-/* 162 */
+/* 165 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 
 var compressions = __webpack_require__(89);
-var ZipFileWorker = __webpack_require__(164);
+var ZipFileWorker = __webpack_require__(167);
 
 /**
  * Find the compression to use.
@@ -34786,14 +36228,14 @@ exports.generateWorker = function (zip, options, comment) {
 
 
 /***/ }),
-/* 163 */
+/* 166 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 var USE_TYPEDARRAY = (typeof Uint8Array !== 'undefined') && (typeof Uint16Array !== 'undefined') && (typeof Uint32Array !== 'undefined');
 
-var pako = __webpack_require__(21);
+var pako = __webpack_require__(23);
 var utils = __webpack_require__(2);
 var GenericWorker = __webpack_require__(7);
 
@@ -34878,7 +36320,7 @@ exports.uncompressWorker = function () {
 
 
 /***/ }),
-/* 164 */
+/* 167 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -34887,7 +36329,7 @@ exports.uncompressWorker = function () {
 var utils = __webpack_require__(2);
 var GenericWorker = __webpack_require__(7);
 var utf8 = __webpack_require__(16);
-var crc32 = __webpack_require__(49);
+var crc32 = __webpack_require__(51);
 var signature = __webpack_require__(90);
 
 /**
@@ -35425,7 +36867,7 @@ module.exports = ZipFileWorker;
 
 
 /***/ }),
-/* 165 */
+/* 168 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -35506,18 +36948,18 @@ module.exports = NodejsStreamInputAdapter;
 
 
 /***/ }),
-/* 166 */
+/* 169 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 var utils = __webpack_require__(2);
-var external = __webpack_require__(23);
+var external = __webpack_require__(25);
 var utf8 = __webpack_require__(16);
 var utils = __webpack_require__(2);
-var ZipEntries = __webpack_require__(167);
+var ZipEntries = __webpack_require__(170);
 var Crc32Probe = __webpack_require__(88);
-var nodejsUtils = __webpack_require__(29);
+var nodejsUtils = __webpack_require__(30);
 
 /**
  * Check the CRC32 of an entry.
@@ -35595,7 +37037,7 @@ module.exports = function(data, options) {
 
 
 /***/ }),
-/* 167 */
+/* 170 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -35603,7 +37045,7 @@ module.exports = function(data, options) {
 var readerFor = __webpack_require__(91);
 var utils = __webpack_require__(2);
 var sig = __webpack_require__(90);
-var ZipEntry = __webpack_require__(170);
+var ZipEntry = __webpack_require__(173);
 var utf8 = __webpack_require__(16);
 var support = __webpack_require__(12);
 //  class ZipEntries {{{
@@ -35864,7 +37306,7 @@ module.exports = ZipEntries;
 
 
 /***/ }),
-/* 168 */
+/* 171 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -35909,7 +37351,7 @@ module.exports = StringReader;
 
 
 /***/ }),
-/* 169 */
+/* 172 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -35935,15 +37377,15 @@ module.exports = NodeBufferReader;
 
 
 /***/ }),
-/* 170 */
+/* 173 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
 
 var readerFor = __webpack_require__(91);
 var utils = __webpack_require__(2);
-var CompressedObject = __webpack_require__(48);
-var crc32fn = __webpack_require__(49);
+var CompressedObject = __webpack_require__(50);
+var crc32fn = __webpack_require__(51);
 var utf8 = __webpack_require__(16);
 var compressions = __webpack_require__(89);
 var support = __webpack_require__(12);
@@ -36234,7 +37676,1078 @@ module.exports = ZipEntry;
 
 
 /***/ }),
-/* 171 */
+/* 174 */
+/***/ (function(module, exports, __webpack_require__) {
+
+// A library of seedable RNGs implemented in Javascript.
+//
+// Usage:
+//
+// var seedrandom = require('seedrandom');
+// var random = seedrandom(1); // or any seed.
+// var x = random();       // 0 <= x < 1.  Every bit is random.
+// var x = random.quick(); // 0 <= x < 1.  32 bits of randomness.
+
+// alea, a 53-bit multiply-with-carry generator by Johannes Baagøe.
+// Period: ~2^116
+// Reported to pass all BigCrush tests.
+var alea = __webpack_require__(175);
+
+// xor128, a pure xor-shift generator by George Marsaglia.
+// Period: 2^128-1.
+// Reported to fail: MatrixRank and LinearComp.
+var xor128 = __webpack_require__(176);
+
+// xorwow, George Marsaglia's 160-bit xor-shift combined plus weyl.
+// Period: 2^192-2^32
+// Reported to fail: CollisionOver, SimpPoker, and LinearComp.
+var xorwow = __webpack_require__(177);
+
+// xorshift7, by François Panneton and Pierre L'ecuyer, takes
+// a different approach: it adds robustness by allowing more shifts
+// than Marsaglia's original three.  It is a 7-shift generator
+// with 256 bits, that passes BigCrush with no systmatic failures.
+// Period 2^256-1.
+// No systematic BigCrush failures reported.
+var xorshift7 = __webpack_require__(178);
+
+// xor4096, by Richard Brent, is a 4096-bit xor-shift with a
+// very long period that also adds a Weyl generator. It also passes
+// BigCrush with no systematic failures.  Its long period may
+// be useful if you have many generators and need to avoid
+// collisions.
+// Period: 2^4128-2^32.
+// No systematic BigCrush failures reported.
+var xor4096 = __webpack_require__(179);
+
+// Tyche-i, by Samuel Neves and Filipe Araujo, is a bit-shifting random
+// number generator derived from ChaCha, a modern stream cipher.
+// https://eden.dei.uc.pt/~sneves/pubs/2011-snfa2.pdf
+// Period: ~2^127
+// No systematic BigCrush failures reported.
+var tychei = __webpack_require__(180);
+
+// The original ARC4-based prng included in this library.
+// Period: ~2^1600
+var sr = __webpack_require__(181);
+
+sr.alea = alea;
+sr.xor128 = xor128;
+sr.xorwow = xorwow;
+sr.xorshift7 = xorshift7;
+sr.xor4096 = xor4096;
+sr.tychei = tychei;
+
+module.exports = sr;
+
+
+/***/ }),
+/* 175 */
+/***/ (function(module, exports, __webpack_require__) {
+
+/* WEBPACK VAR INJECTION */(function(module) {var __WEBPACK_AMD_DEFINE_RESULT__;// A port of an algorithm by Johannes Baagøe <baagoe@baagoe.com>, 2010
+// http://baagoe.com/en/RandomMusings/javascript/
+// https://github.com/nquinlan/better-random-numbers-for-javascript-mirror
+// Original work is under MIT license -
+
+// Copyright (C) 2010 by Johannes Baagøe <baagoe@baagoe.org>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+
+
+(function(global, module, define) {
+
+function Alea(seed) {
+  var me = this, mash = Mash();
+
+  me.next = function() {
+    var t = 2091639 * me.s0 + me.c * 2.3283064365386963e-10; // 2^-32
+    me.s0 = me.s1;
+    me.s1 = me.s2;
+    return me.s2 = t - (me.c = t | 0);
+  };
+
+  // Apply the seeding algorithm from Baagoe.
+  me.c = 1;
+  me.s0 = mash(' ');
+  me.s1 = mash(' ');
+  me.s2 = mash(' ');
+  me.s0 -= mash(seed);
+  if (me.s0 < 0) { me.s0 += 1; }
+  me.s1 -= mash(seed);
+  if (me.s1 < 0) { me.s1 += 1; }
+  me.s2 -= mash(seed);
+  if (me.s2 < 0) { me.s2 += 1; }
+  mash = null;
+}
+
+function copy(f, t) {
+  t.c = f.c;
+  t.s0 = f.s0;
+  t.s1 = f.s1;
+  t.s2 = f.s2;
+  return t;
+}
+
+function impl(seed, opts) {
+  var xg = new Alea(seed),
+      state = opts && opts.state,
+      prng = xg.next;
+  prng.int32 = function() { return (xg.next() * 0x100000000) | 0; }
+  prng.double = function() {
+    return prng() + (prng() * 0x200000 | 0) * 1.1102230246251565e-16; // 2^-53
+  };
+  prng.quick = prng;
+  if (state) {
+    if (typeof(state) == 'object') copy(state, xg);
+    prng.state = function() { return copy(xg, {}); }
+  }
+  return prng;
+}
+
+function Mash() {
+  var n = 0xefc8249d;
+
+  var mash = function(data) {
+    data = data.toString();
+    for (var i = 0; i < data.length; i++) {
+      n += data.charCodeAt(i);
+      var h = 0.02519603282416938 * n;
+      n = h >>> 0;
+      h -= n;
+      h *= n;
+      n = h >>> 0;
+      h -= n;
+      n += h * 0x100000000; // 2^32
+    }
+    return (n >>> 0) * 2.3283064365386963e-10; // 2^-32
+  };
+
+  return mash;
+}
+
+
+if (module && module.exports) {
+  module.exports = impl;
+} else if (__webpack_require__(8) && __webpack_require__(20)) {
+  !(__WEBPACK_AMD_DEFINE_RESULT__ = function() { return impl; }.call(exports, __webpack_require__, exports, module),
+				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
+} else {
+  this.alea = impl;
+}
+
+})(
+  this,
+  (typeof module) == 'object' && module,    // present in node.js
+  __webpack_require__(8)   // present with an AMD loader
+);
+
+
+
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(19)(module)))
+
+/***/ }),
+/* 176 */
+/***/ (function(module, exports, __webpack_require__) {
+
+/* WEBPACK VAR INJECTION */(function(module) {var __WEBPACK_AMD_DEFINE_RESULT__;// A Javascript implementaion of the "xor128" prng algorithm by
+// George Marsaglia.  See http://www.jstatsoft.org/v08/i14/paper
+
+(function(global, module, define) {
+
+function XorGen(seed) {
+  var me = this, strseed = '';
+
+  me.x = 0;
+  me.y = 0;
+  me.z = 0;
+  me.w = 0;
+
+  // Set up generator function.
+  me.next = function() {
+    var t = me.x ^ (me.x << 11);
+    me.x = me.y;
+    me.y = me.z;
+    me.z = me.w;
+    return me.w ^= (me.w >>> 19) ^ t ^ (t >>> 8);
+  };
+
+  if (seed === (seed | 0)) {
+    // Integer seed.
+    me.x = seed;
+  } else {
+    // String seed.
+    strseed += seed;
+  }
+
+  // Mix in string seed, then discard an initial batch of 64 values.
+  for (var k = 0; k < strseed.length + 64; k++) {
+    me.x ^= strseed.charCodeAt(k) | 0;
+    me.next();
+  }
+}
+
+function copy(f, t) {
+  t.x = f.x;
+  t.y = f.y;
+  t.z = f.z;
+  t.w = f.w;
+  return t;
+}
+
+function impl(seed, opts) {
+  var xg = new XorGen(seed),
+      state = opts && opts.state,
+      prng = function() { return (xg.next() >>> 0) / 0x100000000; };
+  prng.double = function() {
+    do {
+      var top = xg.next() >>> 11,
+          bot = (xg.next() >>> 0) / 0x100000000,
+          result = (top + bot) / (1 << 21);
+    } while (result === 0);
+    return result;
+  };
+  prng.int32 = xg.next;
+  prng.quick = prng;
+  if (state) {
+    if (typeof(state) == 'object') copy(state, xg);
+    prng.state = function() { return copy(xg, {}); }
+  }
+  return prng;
+}
+
+if (module && module.exports) {
+  module.exports = impl;
+} else if (__webpack_require__(8) && __webpack_require__(20)) {
+  !(__WEBPACK_AMD_DEFINE_RESULT__ = function() { return impl; }.call(exports, __webpack_require__, exports, module),
+				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
+} else {
+  this.xor128 = impl;
+}
+
+})(
+  this,
+  (typeof module) == 'object' && module,    // present in node.js
+  __webpack_require__(8)   // present with an AMD loader
+);
+
+
+
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(19)(module)))
+
+/***/ }),
+/* 177 */
+/***/ (function(module, exports, __webpack_require__) {
+
+/* WEBPACK VAR INJECTION */(function(module) {var __WEBPACK_AMD_DEFINE_RESULT__;// A Javascript implementaion of the "xorwow" prng algorithm by
+// George Marsaglia.  See http://www.jstatsoft.org/v08/i14/paper
+
+(function(global, module, define) {
+
+function XorGen(seed) {
+  var me = this, strseed = '';
+
+  // Set up generator function.
+  me.next = function() {
+    var t = (me.x ^ (me.x >>> 2));
+    me.x = me.y; me.y = me.z; me.z = me.w; me.w = me.v;
+    return (me.d = (me.d + 362437 | 0)) +
+       (me.v = (me.v ^ (me.v << 4)) ^ (t ^ (t << 1))) | 0;
+  };
+
+  me.x = 0;
+  me.y = 0;
+  me.z = 0;
+  me.w = 0;
+  me.v = 0;
+
+  if (seed === (seed | 0)) {
+    // Integer seed.
+    me.x = seed;
+  } else {
+    // String seed.
+    strseed += seed;
+  }
+
+  // Mix in string seed, then discard an initial batch of 64 values.
+  for (var k = 0; k < strseed.length + 64; k++) {
+    me.x ^= strseed.charCodeAt(k) | 0;
+    if (k == strseed.length) {
+      me.d = me.x << 10 ^ me.x >>> 4;
+    }
+    me.next();
+  }
+}
+
+function copy(f, t) {
+  t.x = f.x;
+  t.y = f.y;
+  t.z = f.z;
+  t.w = f.w;
+  t.v = f.v;
+  t.d = f.d;
+  return t;
+}
+
+function impl(seed, opts) {
+  var xg = new XorGen(seed),
+      state = opts && opts.state,
+      prng = function() { return (xg.next() >>> 0) / 0x100000000; };
+  prng.double = function() {
+    do {
+      var top = xg.next() >>> 11,
+          bot = (xg.next() >>> 0) / 0x100000000,
+          result = (top + bot) / (1 << 21);
+    } while (result === 0);
+    return result;
+  };
+  prng.int32 = xg.next;
+  prng.quick = prng;
+  if (state) {
+    if (typeof(state) == 'object') copy(state, xg);
+    prng.state = function() { return copy(xg, {}); }
+  }
+  return prng;
+}
+
+if (module && module.exports) {
+  module.exports = impl;
+} else if (__webpack_require__(8) && __webpack_require__(20)) {
+  !(__WEBPACK_AMD_DEFINE_RESULT__ = function() { return impl; }.call(exports, __webpack_require__, exports, module),
+				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
+} else {
+  this.xorwow = impl;
+}
+
+})(
+  this,
+  (typeof module) == 'object' && module,    // present in node.js
+  __webpack_require__(8)   // present with an AMD loader
+);
+
+
+
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(19)(module)))
+
+/***/ }),
+/* 178 */
+/***/ (function(module, exports, __webpack_require__) {
+
+/* WEBPACK VAR INJECTION */(function(module) {var __WEBPACK_AMD_DEFINE_RESULT__;// A Javascript implementaion of the "xorshift7" algorithm by
+// François Panneton and Pierre L'ecuyer:
+// "On the Xorgshift Random Number Generators"
+// http://saluc.engr.uconn.edu/refs/crypto/rng/panneton05onthexorshift.pdf
+
+(function(global, module, define) {
+
+function XorGen(seed) {
+  var me = this;
+
+  // Set up generator function.
+  me.next = function() {
+    // Update xor generator.
+    var X = me.x, i = me.i, t, v, w;
+    t = X[i]; t ^= (t >>> 7); v = t ^ (t << 24);
+    t = X[(i + 1) & 7]; v ^= t ^ (t >>> 10);
+    t = X[(i + 3) & 7]; v ^= t ^ (t >>> 3);
+    t = X[(i + 4) & 7]; v ^= t ^ (t << 7);
+    t = X[(i + 7) & 7]; t = t ^ (t << 13); v ^= t ^ (t << 9);
+    X[i] = v;
+    me.i = (i + 1) & 7;
+    return v;
+  };
+
+  function init(me, seed) {
+    var j, w, X = [];
+
+    if (seed === (seed | 0)) {
+      // Seed state array using a 32-bit integer.
+      w = X[0] = seed;
+    } else {
+      // Seed state using a string.
+      seed = '' + seed;
+      for (j = 0; j < seed.length; ++j) {
+        X[j & 7] = (X[j & 7] << 15) ^
+            (seed.charCodeAt(j) + X[(j + 1) & 7] << 13);
+      }
+    }
+    // Enforce an array length of 8, not all zeroes.
+    while (X.length < 8) X.push(0);
+    for (j = 0; j < 8 && X[j] === 0; ++j);
+    if (j == 8) w = X[7] = -1; else w = X[j];
+
+    me.x = X;
+    me.i = 0;
+
+    // Discard an initial 256 values.
+    for (j = 256; j > 0; --j) {
+      me.next();
+    }
+  }
+
+  init(me, seed);
+}
+
+function copy(f, t) {
+  t.x = f.x.slice();
+  t.i = f.i;
+  return t;
+}
+
+function impl(seed, opts) {
+  if (seed == null) seed = +(new Date);
+  var xg = new XorGen(seed),
+      state = opts && opts.state,
+      prng = function() { return (xg.next() >>> 0) / 0x100000000; };
+  prng.double = function() {
+    do {
+      var top = xg.next() >>> 11,
+          bot = (xg.next() >>> 0) / 0x100000000,
+          result = (top + bot) / (1 << 21);
+    } while (result === 0);
+    return result;
+  };
+  prng.int32 = xg.next;
+  prng.quick = prng;
+  if (state) {
+    if (state.x) copy(state, xg);
+    prng.state = function() { return copy(xg, {}); }
+  }
+  return prng;
+}
+
+if (module && module.exports) {
+  module.exports = impl;
+} else if (__webpack_require__(8) && __webpack_require__(20)) {
+  !(__WEBPACK_AMD_DEFINE_RESULT__ = function() { return impl; }.call(exports, __webpack_require__, exports, module),
+				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
+} else {
+  this.xorshift7 = impl;
+}
+
+})(
+  this,
+  (typeof module) == 'object' && module,    // present in node.js
+  __webpack_require__(8)   // present with an AMD loader
+);
+
+
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(19)(module)))
+
+/***/ }),
+/* 179 */
+/***/ (function(module, exports, __webpack_require__) {
+
+/* WEBPACK VAR INJECTION */(function(module) {var __WEBPACK_AMD_DEFINE_RESULT__;// A Javascript implementaion of Richard Brent's Xorgens xor4096 algorithm.
+//
+// This fast non-cryptographic random number generator is designed for
+// use in Monte-Carlo algorithms. It combines a long-period xorshift
+// generator with a Weyl generator, and it passes all common batteries
+// of stasticial tests for randomness while consuming only a few nanoseconds
+// for each prng generated.  For background on the generator, see Brent's
+// paper: "Some long-period random number generators using shifts and xors."
+// http://arxiv.org/pdf/1004.3115v1.pdf
+//
+// Usage:
+//
+// var xor4096 = require('xor4096');
+// random = xor4096(1);                        // Seed with int32 or string.
+// assert.equal(random(), 0.1520436450538547); // (0, 1) range, 53 bits.
+// assert.equal(random.int32(), 1806534897);   // signed int32, 32 bits.
+//
+// For nonzero numeric keys, this impelementation provides a sequence
+// identical to that by Brent's xorgens 3 implementaion in C.  This
+// implementation also provides for initalizing the generator with
+// string seeds, or for saving and restoring the state of the generator.
+//
+// On Chrome, this prng benchmarks about 2.1 times slower than
+// Javascript's built-in Math.random().
+
+(function(global, module, define) {
+
+function XorGen(seed) {
+  var me = this;
+
+  // Set up generator function.
+  me.next = function() {
+    var w = me.w,
+        X = me.X, i = me.i, t, v;
+    // Update Weyl generator.
+    me.w = w = (w + 0x61c88647) | 0;
+    // Update xor generator.
+    v = X[(i + 34) & 127];
+    t = X[i = ((i + 1) & 127)];
+    v ^= v << 13;
+    t ^= t << 17;
+    v ^= v >>> 15;
+    t ^= t >>> 12;
+    // Update Xor generator array state.
+    v = X[i] = v ^ t;
+    me.i = i;
+    // Result is the combination.
+    return (v + (w ^ (w >>> 16))) | 0;
+  };
+
+  function init(me, seed) {
+    var t, v, i, j, w, X = [], limit = 128;
+    if (seed === (seed | 0)) {
+      // Numeric seeds initialize v, which is used to generates X.
+      v = seed;
+      seed = null;
+    } else {
+      // String seeds are mixed into v and X one character at a time.
+      seed = seed + '\0';
+      v = 0;
+      limit = Math.max(limit, seed.length);
+    }
+    // Initialize circular array and weyl value.
+    for (i = 0, j = -32; j < limit; ++j) {
+      // Put the unicode characters into the array, and shuffle them.
+      if (seed) v ^= seed.charCodeAt((j + 32) % seed.length);
+      // After 32 shuffles, take v as the starting w value.
+      if (j === 0) w = v;
+      v ^= v << 10;
+      v ^= v >>> 15;
+      v ^= v << 4;
+      v ^= v >>> 13;
+      if (j >= 0) {
+        w = (w + 0x61c88647) | 0;     // Weyl.
+        t = (X[j & 127] ^= (v + w));  // Combine xor and weyl to init array.
+        i = (0 == t) ? i + 1 : 0;     // Count zeroes.
+      }
+    }
+    // We have detected all zeroes; make the key nonzero.
+    if (i >= 128) {
+      X[(seed && seed.length || 0) & 127] = -1;
+    }
+    // Run the generator 512 times to further mix the state before using it.
+    // Factoring this as a function slows the main generator, so it is just
+    // unrolled here.  The weyl generator is not advanced while warming up.
+    i = 127;
+    for (j = 4 * 128; j > 0; --j) {
+      v = X[(i + 34) & 127];
+      t = X[i = ((i + 1) & 127)];
+      v ^= v << 13;
+      t ^= t << 17;
+      v ^= v >>> 15;
+      t ^= t >>> 12;
+      X[i] = v ^ t;
+    }
+    // Storing state as object members is faster than using closure variables.
+    me.w = w;
+    me.X = X;
+    me.i = i;
+  }
+
+  init(me, seed);
+}
+
+function copy(f, t) {
+  t.i = f.i;
+  t.w = f.w;
+  t.X = f.X.slice();
+  return t;
+};
+
+function impl(seed, opts) {
+  if (seed == null) seed = +(new Date);
+  var xg = new XorGen(seed),
+      state = opts && opts.state,
+      prng = function() { return (xg.next() >>> 0) / 0x100000000; };
+  prng.double = function() {
+    do {
+      var top = xg.next() >>> 11,
+          bot = (xg.next() >>> 0) / 0x100000000,
+          result = (top + bot) / (1 << 21);
+    } while (result === 0);
+    return result;
+  };
+  prng.int32 = xg.next;
+  prng.quick = prng;
+  if (state) {
+    if (state.X) copy(state, xg);
+    prng.state = function() { return copy(xg, {}); }
+  }
+  return prng;
+}
+
+if (module && module.exports) {
+  module.exports = impl;
+} else if (__webpack_require__(8) && __webpack_require__(20)) {
+  !(__WEBPACK_AMD_DEFINE_RESULT__ = function() { return impl; }.call(exports, __webpack_require__, exports, module),
+				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
+} else {
+  this.xor4096 = impl;
+}
+
+})(
+  this,                                     // window object or global
+  (typeof module) == 'object' && module,    // present in node.js
+  __webpack_require__(8)   // present with an AMD loader
+);
+
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(19)(module)))
+
+/***/ }),
+/* 180 */
+/***/ (function(module, exports, __webpack_require__) {
+
+/* WEBPACK VAR INJECTION */(function(module) {var __WEBPACK_AMD_DEFINE_RESULT__;// A Javascript implementaion of the "Tyche-i" prng algorithm by
+// Samuel Neves and Filipe Araujo.
+// See https://eden.dei.uc.pt/~sneves/pubs/2011-snfa2.pdf
+
+(function(global, module, define) {
+
+function XorGen(seed) {
+  var me = this, strseed = '';
+
+  // Set up generator function.
+  me.next = function() {
+    var b = me.b, c = me.c, d = me.d, a = me.a;
+    b = (b << 25) ^ (b >>> 7) ^ c;
+    c = (c - d) | 0;
+    d = (d << 24) ^ (d >>> 8) ^ a;
+    a = (a - b) | 0;
+    me.b = b = (b << 20) ^ (b >>> 12) ^ c;
+    me.c = c = (c - d) | 0;
+    me.d = (d << 16) ^ (c >>> 16) ^ a;
+    return me.a = (a - b) | 0;
+  };
+
+  /* The following is non-inverted tyche, which has better internal
+   * bit diffusion, but which is about 25% slower than tyche-i in JS.
+  me.next = function() {
+    var a = me.a, b = me.b, c = me.c, d = me.d;
+    a = (me.a + me.b | 0) >>> 0;
+    d = me.d ^ a; d = d << 16 ^ d >>> 16;
+    c = me.c + d | 0;
+    b = me.b ^ c; b = b << 12 ^ d >>> 20;
+    me.a = a = a + b | 0;
+    d = d ^ a; me.d = d = d << 8 ^ d >>> 24;
+    me.c = c = c + d | 0;
+    b = b ^ c;
+    return me.b = (b << 7 ^ b >>> 25);
+  }
+  */
+
+  me.a = 0;
+  me.b = 0;
+  me.c = 2654435769 | 0;
+  me.d = 1367130551;
+
+  if (seed === Math.floor(seed)) {
+    // Integer seed.
+    me.a = (seed / 0x100000000) | 0;
+    me.b = seed | 0;
+  } else {
+    // String seed.
+    strseed += seed;
+  }
+
+  // Mix in string seed, then discard an initial batch of 64 values.
+  for (var k = 0; k < strseed.length + 20; k++) {
+    me.b ^= strseed.charCodeAt(k) | 0;
+    me.next();
+  }
+}
+
+function copy(f, t) {
+  t.a = f.a;
+  t.b = f.b;
+  t.c = f.c;
+  t.d = f.d;
+  return t;
+};
+
+function impl(seed, opts) {
+  var xg = new XorGen(seed),
+      state = opts && opts.state,
+      prng = function() { return (xg.next() >>> 0) / 0x100000000; };
+  prng.double = function() {
+    do {
+      var top = xg.next() >>> 11,
+          bot = (xg.next() >>> 0) / 0x100000000,
+          result = (top + bot) / (1 << 21);
+    } while (result === 0);
+    return result;
+  };
+  prng.int32 = xg.next;
+  prng.quick = prng;
+  if (state) {
+    if (typeof(state) == 'object') copy(state, xg);
+    prng.state = function() { return copy(xg, {}); }
+  }
+  return prng;
+}
+
+if (module && module.exports) {
+  module.exports = impl;
+} else if (__webpack_require__(8) && __webpack_require__(20)) {
+  !(__WEBPACK_AMD_DEFINE_RESULT__ = function() { return impl; }.call(exports, __webpack_require__, exports, module),
+				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
+} else {
+  this.tychei = impl;
+}
+
+})(
+  this,
+  (typeof module) == 'object' && module,    // present in node.js
+  __webpack_require__(8)   // present with an AMD loader
+);
+
+
+
+/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(19)(module)))
+
+/***/ }),
+/* 181 */
+/***/ (function(module, exports, __webpack_require__) {
+
+var __WEBPACK_AMD_DEFINE_RESULT__;/*
+Copyright 2014 David Bau.
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+*/
+
+(function (pool, math) {
+//
+// The following constants are related to IEEE 754 limits.
+//
+var global = this,
+    width = 256,        // each RC4 output is 0 <= x < 256
+    chunks = 6,         // at least six RC4 outputs for each double
+    digits = 52,        // there are 52 significant digits in a double
+    rngname = 'random', // rngname: name for Math.random and Math.seedrandom
+    startdenom = math.pow(width, chunks),
+    significance = math.pow(2, digits),
+    overflow = significance * 2,
+    mask = width - 1,
+    nodecrypto;         // node.js crypto module, initialized at the bottom.
+
+//
+// seedrandom()
+// This is the seedrandom function described above.
+//
+function seedrandom(seed, options, callback) {
+  var key = [];
+  options = (options == true) ? { entropy: true } : (options || {});
+
+  // Flatten the seed string or build one from local entropy if needed.
+  var shortseed = mixkey(flatten(
+    options.entropy ? [seed, tostring(pool)] :
+    (seed == null) ? autoseed() : seed, 3), key);
+
+  // Use the seed to initialize an ARC4 generator.
+  var arc4 = new ARC4(key);
+
+  // This function returns a random double in [0, 1) that contains
+  // randomness in every bit of the mantissa of the IEEE 754 value.
+  var prng = function() {
+    var n = arc4.g(chunks),             // Start with a numerator n < 2 ^ 48
+        d = startdenom,                 //   and denominator d = 2 ^ 48.
+        x = 0;                          //   and no 'extra last byte'.
+    while (n < significance) {          // Fill up all significant digits by
+      n = (n + x) * width;              //   shifting numerator and
+      d *= width;                       //   denominator and generating a
+      x = arc4.g(1);                    //   new least-significant-byte.
+    }
+    while (n >= overflow) {             // To avoid rounding up, before adding
+      n /= 2;                           //   last byte, shift everything
+      d /= 2;                           //   right using integer math until
+      x >>>= 1;                         //   we have exactly the desired bits.
+    }
+    return (n + x) / d;                 // Form the number within [0, 1).
+  };
+
+  prng.int32 = function() { return arc4.g(4) | 0; }
+  prng.quick = function() { return arc4.g(4) / 0x100000000; }
+  prng.double = prng;
+
+  // Mix the randomness into accumulated entropy.
+  mixkey(tostring(arc4.S), pool);
+
+  // Calling convention: what to return as a function of prng, seed, is_math.
+  return (options.pass || callback ||
+      function(prng, seed, is_math_call, state) {
+        if (state) {
+          // Load the arc4 state from the given state if it has an S array.
+          if (state.S) { copy(state, arc4); }
+          // Only provide the .state method if requested via options.state.
+          prng.state = function() { return copy(arc4, {}); }
+        }
+
+        // If called as a method of Math (Math.seedrandom()), mutate
+        // Math.random because that is how seedrandom.js has worked since v1.0.
+        if (is_math_call) { math[rngname] = prng; return seed; }
+
+        // Otherwise, it is a newer calling convention, so return the
+        // prng directly.
+        else return prng;
+      })(
+  prng,
+  shortseed,
+  'global' in options ? options.global : (this == math),
+  options.state);
+}
+math['seed' + rngname] = seedrandom;
+
+//
+// ARC4
+//
+// An ARC4 implementation.  The constructor takes a key in the form of
+// an array of at most (width) integers that should be 0 <= x < (width).
+//
+// The g(count) method returns a pseudorandom integer that concatenates
+// the next (count) outputs from ARC4.  Its return value is a number x
+// that is in the range 0 <= x < (width ^ count).
+//
+function ARC4(key) {
+  var t, keylen = key.length,
+      me = this, i = 0, j = me.i = me.j = 0, s = me.S = [];
+
+  // The empty key [] is treated as [0].
+  if (!keylen) { key = [keylen++]; }
+
+  // Set up S using the standard key scheduling algorithm.
+  while (i < width) {
+    s[i] = i++;
+  }
+  for (i = 0; i < width; i++) {
+    s[i] = s[j = mask & (j + key[i % keylen] + (t = s[i]))];
+    s[j] = t;
+  }
+
+  // The "g" method returns the next (count) outputs as one number.
+  (me.g = function(count) {
+    // Using instance members instead of closure state nearly doubles speed.
+    var t, r = 0,
+        i = me.i, j = me.j, s = me.S;
+    while (count--) {
+      t = s[i = mask & (i + 1)];
+      r = r * width + s[mask & ((s[i] = s[j = mask & (j + t)]) + (s[j] = t))];
+    }
+    me.i = i; me.j = j;
+    return r;
+    // For robust unpredictability, the function call below automatically
+    // discards an initial batch of values.  This is called RC4-drop[256].
+    // See http://google.com/search?q=rsa+fluhrer+response&btnI
+  })(width);
+}
+
+//
+// copy()
+// Copies internal state of ARC4 to or from a plain object.
+//
+function copy(f, t) {
+  t.i = f.i;
+  t.j = f.j;
+  t.S = f.S.slice();
+  return t;
+};
+
+//
+// flatten()
+// Converts an object tree to nested arrays of strings.
+//
+function flatten(obj, depth) {
+  var result = [], typ = (typeof obj), prop;
+  if (depth && typ == 'object') {
+    for (prop in obj) {
+      try { result.push(flatten(obj[prop], depth - 1)); } catch (e) {}
+    }
+  }
+  return (result.length ? result : typ == 'string' ? obj : obj + '\0');
+}
+
+//
+// mixkey()
+// Mixes a string seed into a key that is an array of integers, and
+// returns a shortened string seed that is equivalent to the result key.
+//
+function mixkey(seed, key) {
+  var stringseed = seed + '', smear, j = 0;
+  while (j < stringseed.length) {
+    key[mask & j] =
+      mask & ((smear ^= key[mask & j] * 19) + stringseed.charCodeAt(j++));
+  }
+  return tostring(key);
+}
+
+//
+// autoseed()
+// Returns an object for autoseeding, using window.crypto and Node crypto
+// module if available.
+//
+function autoseed() {
+  try {
+    var out;
+    if (nodecrypto && (out = nodecrypto.randomBytes)) {
+      // The use of 'out' to remember randomBytes makes tight minified code.
+      out = out(width);
+    } else {
+      out = new Uint8Array(width);
+      (global.crypto || global.msCrypto).getRandomValues(out);
+    }
+    return tostring(out);
+  } catch (e) {
+    var browser = global.navigator,
+        plugins = browser && browser.plugins;
+    return [+new Date, global, plugins, global.screen, tostring(pool)];
+  }
+}
+
+//
+// tostring()
+// Converts an array of charcodes to a string
+//
+function tostring(a) {
+  return String.fromCharCode.apply(0, a);
+}
+
+//
+// When seedrandom.js is loaded, we immediately mix a few bits
+// from the built-in RNG into the entropy pool.  Because we do
+// not want to interfere with deterministic PRNG state later,
+// seedrandom will not call math.random on its own again after
+// initialization.
+//
+mixkey(math.random(), pool);
+
+//
+// Nodejs and AMD support: export the implementation as a module using
+// either convention.
+//
+if ((typeof module) == 'object' && module.exports) {
+  module.exports = seedrandom;
+  // When in node.js, try using crypto package for autoseeding.
+  try {
+    nodecrypto = __webpack_require__(182);
+  } catch (ex) {}
+} else if (true) {
+  !(__WEBPACK_AMD_DEFINE_RESULT__ = function() { return seedrandom; }.call(exports, __webpack_require__, exports, module),
+				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
+}
+
+// End anonymous scope, and pass initial values.
+})(
+  [],     // pool: entropy pool starts empty
+  Math    // math: package containing random, pow, and seedrandom
+);
+
+
+/***/ }),
+/* 182 */
+/***/ (function(module, exports) {
+
+/* (ignored) */
+
+/***/ }),
+/* 183 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+/**
+ * Converts a binary buffer in an ArrayBuffer to a string.
+ *
+ * Note this does not take encoding into consideration, so don't
+ * expect proper Unicode or any other encoding.
+ */
+function arrayBufferToString(arrayBuffer) {
+  if ('TextDecoder' in window) {
+    var decoder = new TextDecoder('latin1');
+    return decoder.decode(arrayBuffer);
+  }
+  // fallback on platforms w/o TextDecoder
+  var byteArray = new Uint8Array(arrayBuffer);
+  var strArr = [];
+  for (var i = 0; i < byteArray.length; ++i) {
+    strArr[i] = String.fromCharCode(byteArray[i]);
+  }
+  return strArr.join('');
+}
+
+/**
+ * Extracts binary data out of a file ArrayBuffer given a prefix/suffix.
+ */
+function extractBinary(arrayBuffer, prefixRegex) {
+  var suffixRegex = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : null;
+
+  var str = arrayBufferToString(arrayBuffer);
+
+  var prefixMatch = prefixRegex.exec(str);
+  if (!prefixMatch) {
+    return { text: str };
+  }
+
+  var dataStartIndex = prefixMatch.index + prefixMatch[0].length;
+  var strFirstHalf = str.substring(0, dataStartIndex);
+  var retVal = null;
+
+  var suffixMatch = suffixRegex ? suffixRegex.exec(str) : null;
+  if (suffixMatch) {
+    var strSecondHalf = str.substr(suffixMatch.index);
+    retVal = {
+      text: strFirstHalf + strSecondHalf,
+      binaryBuffer: arrayBuffer.slice(dataStartIndex, suffixMatch.index)
+    };
+  } else {
+    // no suffix, so just take all the data starting from dataStartIndex
+    retVal = {
+      text: strFirstHalf,
+      binaryBuffer: arrayBuffer.slice(dataStartIndex)
+    };
+  }
+
+  return retVal;
+}
+
+exports.default = {
+  arrayBufferToString: arrayBufferToString,
+  extractBinary: extractBinary
+};
+
+/***/ }),
+/* 184 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -36250,15 +38763,15 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _FieldData = __webpack_require__(172);
+var _FieldData = __webpack_require__(185);
 
 var _FieldData2 = _interopRequireDefault(_FieldData);
 
-var _Constants = __webpack_require__(52);
+var _Constants = __webpack_require__(32);
 
 var _Constants2 = _interopRequireDefault(_Constants);
 
-var _DataArray = __webpack_require__(5);
+var _DataArray = __webpack_require__(4);
 
 var _DataArray2 = _interopRequireDefault(_DataArray);
 
@@ -36405,6 +38918,11 @@ function vtkDataSetAttributes(publicAPI, model) {
     publicAPI['setActive' + value] = function (arrayName) {
       return publicAPI.setActiveAttributeByIndex(publicAPI.getArrayWithIndex(arrayName).index, value);
     };
+    publicAPI['copy' + value + 'Off'] = function () {
+      publicAPI.initialize();
+      var attType = value.toUpperCase();
+      model.copyAttributeFlags[AttributeCopyOperations.PASSDATA][AttributeTypes[attType]] = false;
+    };
   });
 
   publicAPI.initialize = _macro2.default.chain(publicAPI.initialize, function () {
@@ -36416,7 +38934,8 @@ function vtkDataSetAttributes(publicAPI, model) {
       model.copyAttributeFlags[AttributeCopyOperations[attCopyOp]] = Object.keys(AttributeTypes).filter(function (ty) {
         return ty !== 'NUM_ATTRIBUTES';
       }).reduce(function (a, b) {
-        a[AttributeTypes[b]] = true;return a;
+        a[AttributeTypes[b]] = true;
+        return a;
       }, []);
     });
     // Override some operations where we don't want to copy:
@@ -36477,7 +38996,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, _Constants2.default);
 
 /***/ }),
-/* 172 */
+/* 185 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -36544,7 +39063,8 @@ function vtkFieldData(publicAPI, model) {
     return model.arrays.length;
   };
   publicAPI.addArray = function (arr) {
-    model.arrays = [].concat(model.arrays, { data: arr });return model.arrays.length - 1;
+    model.arrays = [].concat(model.arrays, { data: arr });
+    return model.arrays.length - 1;
   };
   publicAPI.removeAllArrays = function () {
     model.arrays = [];
@@ -36594,10 +39114,18 @@ function vtkFieldData(publicAPI, model) {
     return model.copyFieldFlags[arrayName];
   };
   publicAPI.passData = function (other) {
+    var fromId = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : -1;
+    var toId = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : -1;
+
     other.getArrays().forEach(function (arr, idx) {
       var copyFlag = publicAPI.getFlag(arr.getName());
       if (copyFlag !== false && !(model.doCopyAllOff && copyFlag !== true) && arr) {
-        publicAPI.addArray(arr);
+        var destArr = publicAPI.getArrayByName(arr.getName());
+        if (fromId < 1 && toId < 1 || !destArr) {
+          publicAPI.addArray(arr);
+        } else if (idx >= fromId && (toId > -1 || idx < toId)) {
+          destArr.setTuple(idx, arr.getTuple(idx));
+        }
       }
     });
   };
@@ -36662,7 +39190,9 @@ function vtkFieldData(publicAPI, model) {
   publicAPI.getState = function () {
     var result = superGetState();
     result.arrays = model.arrays.map(function (item) {
-      return { data: item.data.getState() };
+      return {
+        data: item.data.getState()
+      };
     });
     return result;
   };
@@ -36694,7 +39224,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 173 */
+/* 186 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -36748,7 +39278,7 @@ function getDataDescriptionFromExtent(inExt) {
 exports.default = Object.assign({ getDataDescriptionFromExtent: getDataDescriptionFromExtent }, _Constants2.default);
 
 /***/ }),
-/* 174 */
+/* 187 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -37056,7 +39586,7 @@ module.exports = mat2;
 
 
 /***/ }),
-/* 175 */
+/* 188 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -37379,7 +39909,7 @@ module.exports = mat2d;
 
 
 /***/ }),
-/* 176 */
+/* 189 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -38668,7 +41198,7 @@ module.exports = mat4;
 
 
 /***/ }),
-/* 177 */
+/* 190 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -39227,7 +41757,7 @@ module.exports = quat;
 
 
 /***/ }),
-/* 178 */
+/* 191 */
 /***/ (function(module, exports, __webpack_require__) {
 
 /* Copyright (c) 2015, Brandon Jones, Colin MacKenzie IV.
@@ -39756,1008 +42286,7 @@ module.exports = vec2;
 
 
 /***/ }),
-/* 179 */
-/***/ (function(module, exports, __webpack_require__) {
-
-// A library of seedable RNGs implemented in Javascript.
-//
-// Usage:
-//
-// var seedrandom = require('seedrandom');
-// var random = seedrandom(1); // or any seed.
-// var x = random();       // 0 <= x < 1.  Every bit is random.
-// var x = random.quick(); // 0 <= x < 1.  32 bits of randomness.
-
-// alea, a 53-bit multiply-with-carry generator by Johannes Baagøe.
-// Period: ~2^116
-// Reported to pass all BigCrush tests.
-var alea = __webpack_require__(180);
-
-// xor128, a pure xor-shift generator by George Marsaglia.
-// Period: 2^128-1.
-// Reported to fail: MatrixRank and LinearComp.
-var xor128 = __webpack_require__(181);
-
-// xorwow, George Marsaglia's 160-bit xor-shift combined plus weyl.
-// Period: 2^192-2^32
-// Reported to fail: CollisionOver, SimpPoker, and LinearComp.
-var xorwow = __webpack_require__(182);
-
-// xorshift7, by François Panneton and Pierre L'ecuyer, takes
-// a different approach: it adds robustness by allowing more shifts
-// than Marsaglia's original three.  It is a 7-shift generator
-// with 256 bits, that passes BigCrush with no systmatic failures.
-// Period 2^256-1.
-// No systematic BigCrush failures reported.
-var xorshift7 = __webpack_require__(183);
-
-// xor4096, by Richard Brent, is a 4096-bit xor-shift with a
-// very long period that also adds a Weyl generator. It also passes
-// BigCrush with no systematic failures.  Its long period may
-// be useful if you have many generators and need to avoid
-// collisions.
-// Period: 2^4128-2^32.
-// No systematic BigCrush failures reported.
-var xor4096 = __webpack_require__(184);
-
-// Tyche-i, by Samuel Neves and Filipe Araujo, is a bit-shifting random
-// number generator derived from ChaCha, a modern stream cipher.
-// https://eden.dei.uc.pt/~sneves/pubs/2011-snfa2.pdf
-// Period: ~2^127
-// No systematic BigCrush failures reported.
-var tychei = __webpack_require__(185);
-
-// The original ARC4-based prng included in this library.
-// Period: ~2^1600
-var sr = __webpack_require__(186);
-
-sr.alea = alea;
-sr.xor128 = xor128;
-sr.xorwow = xorwow;
-sr.xorshift7 = xorshift7;
-sr.xor4096 = xor4096;
-sr.tychei = tychei;
-
-module.exports = sr;
-
-
-/***/ }),
-/* 180 */
-/***/ (function(module, exports, __webpack_require__) {
-
-/* WEBPACK VAR INJECTION */(function(module) {var __WEBPACK_AMD_DEFINE_RESULT__;// A port of an algorithm by Johannes Baagøe <baagoe@baagoe.com>, 2010
-// http://baagoe.com/en/RandomMusings/javascript/
-// https://github.com/nquinlan/better-random-numbers-for-javascript-mirror
-// Original work is under MIT license -
-
-// Copyright (C) 2010 by Johannes Baagøe <baagoe@baagoe.org>
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-// 
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-// 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
-
-
-(function(global, module, define) {
-
-function Alea(seed) {
-  var me = this, mash = Mash();
-
-  me.next = function() {
-    var t = 2091639 * me.s0 + me.c * 2.3283064365386963e-10; // 2^-32
-    me.s0 = me.s1;
-    me.s1 = me.s2;
-    return me.s2 = t - (me.c = t | 0);
-  };
-
-  // Apply the seeding algorithm from Baagoe.
-  me.c = 1;
-  me.s0 = mash(' ');
-  me.s1 = mash(' ');
-  me.s2 = mash(' ');
-  me.s0 -= mash(seed);
-  if (me.s0 < 0) { me.s0 += 1; }
-  me.s1 -= mash(seed);
-  if (me.s1 < 0) { me.s1 += 1; }
-  me.s2 -= mash(seed);
-  if (me.s2 < 0) { me.s2 += 1; }
-  mash = null;
-}
-
-function copy(f, t) {
-  t.c = f.c;
-  t.s0 = f.s0;
-  t.s1 = f.s1;
-  t.s2 = f.s2;
-  return t;
-}
-
-function impl(seed, opts) {
-  var xg = new Alea(seed),
-      state = opts && opts.state,
-      prng = xg.next;
-  prng.int32 = function() { return (xg.next() * 0x100000000) | 0; }
-  prng.double = function() {
-    return prng() + (prng() * 0x200000 | 0) * 1.1102230246251565e-16; // 2^-53
-  };
-  prng.quick = prng;
-  if (state) {
-    if (typeof(state) == 'object') copy(state, xg);
-    prng.state = function() { return copy(xg, {}); }
-  }
-  return prng;
-}
-
-function Mash() {
-  var n = 0xefc8249d;
-
-  var mash = function(data) {
-    data = data.toString();
-    for (var i = 0; i < data.length; i++) {
-      n += data.charCodeAt(i);
-      var h = 0.02519603282416938 * n;
-      n = h >>> 0;
-      h -= n;
-      h *= n;
-      n = h >>> 0;
-      h -= n;
-      n += h * 0x100000000; // 2^32
-    }
-    return (n >>> 0) * 2.3283064365386963e-10; // 2^-32
-  };
-
-  return mash;
-}
-
-
-if (module && module.exports) {
-  module.exports = impl;
-} else if (__webpack_require__(8) && __webpack_require__(20)) {
-  !(__WEBPACK_AMD_DEFINE_RESULT__ = function() { return impl; }.call(exports, __webpack_require__, exports, module),
-				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
-} else {
-  this.alea = impl;
-}
-
-})(
-  this,
-  (typeof module) == 'object' && module,    // present in node.js
-  __webpack_require__(8)   // present with an AMD loader
-);
-
-
-
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(19)(module)))
-
-/***/ }),
-/* 181 */
-/***/ (function(module, exports, __webpack_require__) {
-
-/* WEBPACK VAR INJECTION */(function(module) {var __WEBPACK_AMD_DEFINE_RESULT__;// A Javascript implementaion of the "xor128" prng algorithm by
-// George Marsaglia.  See http://www.jstatsoft.org/v08/i14/paper
-
-(function(global, module, define) {
-
-function XorGen(seed) {
-  var me = this, strseed = '';
-
-  me.x = 0;
-  me.y = 0;
-  me.z = 0;
-  me.w = 0;
-
-  // Set up generator function.
-  me.next = function() {
-    var t = me.x ^ (me.x << 11);
-    me.x = me.y;
-    me.y = me.z;
-    me.z = me.w;
-    return me.w ^= (me.w >>> 19) ^ t ^ (t >>> 8);
-  };
-
-  if (seed === (seed | 0)) {
-    // Integer seed.
-    me.x = seed;
-  } else {
-    // String seed.
-    strseed += seed;
-  }
-
-  // Mix in string seed, then discard an initial batch of 64 values.
-  for (var k = 0; k < strseed.length + 64; k++) {
-    me.x ^= strseed.charCodeAt(k) | 0;
-    me.next();
-  }
-}
-
-function copy(f, t) {
-  t.x = f.x;
-  t.y = f.y;
-  t.z = f.z;
-  t.w = f.w;
-  return t;
-}
-
-function impl(seed, opts) {
-  var xg = new XorGen(seed),
-      state = opts && opts.state,
-      prng = function() { return (xg.next() >>> 0) / 0x100000000; };
-  prng.double = function() {
-    do {
-      var top = xg.next() >>> 11,
-          bot = (xg.next() >>> 0) / 0x100000000,
-          result = (top + bot) / (1 << 21);
-    } while (result === 0);
-    return result;
-  };
-  prng.int32 = xg.next;
-  prng.quick = prng;
-  if (state) {
-    if (typeof(state) == 'object') copy(state, xg);
-    prng.state = function() { return copy(xg, {}); }
-  }
-  return prng;
-}
-
-if (module && module.exports) {
-  module.exports = impl;
-} else if (__webpack_require__(8) && __webpack_require__(20)) {
-  !(__WEBPACK_AMD_DEFINE_RESULT__ = function() { return impl; }.call(exports, __webpack_require__, exports, module),
-				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
-} else {
-  this.xor128 = impl;
-}
-
-})(
-  this,
-  (typeof module) == 'object' && module,    // present in node.js
-  __webpack_require__(8)   // present with an AMD loader
-);
-
-
-
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(19)(module)))
-
-/***/ }),
-/* 182 */
-/***/ (function(module, exports, __webpack_require__) {
-
-/* WEBPACK VAR INJECTION */(function(module) {var __WEBPACK_AMD_DEFINE_RESULT__;// A Javascript implementaion of the "xorwow" prng algorithm by
-// George Marsaglia.  See http://www.jstatsoft.org/v08/i14/paper
-
-(function(global, module, define) {
-
-function XorGen(seed) {
-  var me = this, strseed = '';
-
-  // Set up generator function.
-  me.next = function() {
-    var t = (me.x ^ (me.x >>> 2));
-    me.x = me.y; me.y = me.z; me.z = me.w; me.w = me.v;
-    return (me.d = (me.d + 362437 | 0)) +
-       (me.v = (me.v ^ (me.v << 4)) ^ (t ^ (t << 1))) | 0;
-  };
-
-  me.x = 0;
-  me.y = 0;
-  me.z = 0;
-  me.w = 0;
-  me.v = 0;
-
-  if (seed === (seed | 0)) {
-    // Integer seed.
-    me.x = seed;
-  } else {
-    // String seed.
-    strseed += seed;
-  }
-
-  // Mix in string seed, then discard an initial batch of 64 values.
-  for (var k = 0; k < strseed.length + 64; k++) {
-    me.x ^= strseed.charCodeAt(k) | 0;
-    if (k == strseed.length) {
-      me.d = me.x << 10 ^ me.x >>> 4;
-    }
-    me.next();
-  }
-}
-
-function copy(f, t) {
-  t.x = f.x;
-  t.y = f.y;
-  t.z = f.z;
-  t.w = f.w;
-  t.v = f.v;
-  t.d = f.d;
-  return t;
-}
-
-function impl(seed, opts) {
-  var xg = new XorGen(seed),
-      state = opts && opts.state,
-      prng = function() { return (xg.next() >>> 0) / 0x100000000; };
-  prng.double = function() {
-    do {
-      var top = xg.next() >>> 11,
-          bot = (xg.next() >>> 0) / 0x100000000,
-          result = (top + bot) / (1 << 21);
-    } while (result === 0);
-    return result;
-  };
-  prng.int32 = xg.next;
-  prng.quick = prng;
-  if (state) {
-    if (typeof(state) == 'object') copy(state, xg);
-    prng.state = function() { return copy(xg, {}); }
-  }
-  return prng;
-}
-
-if (module && module.exports) {
-  module.exports = impl;
-} else if (__webpack_require__(8) && __webpack_require__(20)) {
-  !(__WEBPACK_AMD_DEFINE_RESULT__ = function() { return impl; }.call(exports, __webpack_require__, exports, module),
-				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
-} else {
-  this.xorwow = impl;
-}
-
-})(
-  this,
-  (typeof module) == 'object' && module,    // present in node.js
-  __webpack_require__(8)   // present with an AMD loader
-);
-
-
-
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(19)(module)))
-
-/***/ }),
-/* 183 */
-/***/ (function(module, exports, __webpack_require__) {
-
-/* WEBPACK VAR INJECTION */(function(module) {var __WEBPACK_AMD_DEFINE_RESULT__;// A Javascript implementaion of the "xorshift7" algorithm by
-// François Panneton and Pierre L'ecuyer:
-// "On the Xorgshift Random Number Generators"
-// http://saluc.engr.uconn.edu/refs/crypto/rng/panneton05onthexorshift.pdf
-
-(function(global, module, define) {
-
-function XorGen(seed) {
-  var me = this;
-
-  // Set up generator function.
-  me.next = function() {
-    // Update xor generator.
-    var X = me.x, i = me.i, t, v, w;
-    t = X[i]; t ^= (t >>> 7); v = t ^ (t << 24);
-    t = X[(i + 1) & 7]; v ^= t ^ (t >>> 10);
-    t = X[(i + 3) & 7]; v ^= t ^ (t >>> 3);
-    t = X[(i + 4) & 7]; v ^= t ^ (t << 7);
-    t = X[(i + 7) & 7]; t = t ^ (t << 13); v ^= t ^ (t << 9);
-    X[i] = v;
-    me.i = (i + 1) & 7;
-    return v;
-  };
-
-  function init(me, seed) {
-    var j, w, X = [];
-
-    if (seed === (seed | 0)) {
-      // Seed state array using a 32-bit integer.
-      w = X[0] = seed;
-    } else {
-      // Seed state using a string.
-      seed = '' + seed;
-      for (j = 0; j < seed.length; ++j) {
-        X[j & 7] = (X[j & 7] << 15) ^
-            (seed.charCodeAt(j) + X[(j + 1) & 7] << 13);
-      }
-    }
-    // Enforce an array length of 8, not all zeroes.
-    while (X.length < 8) X.push(0);
-    for (j = 0; j < 8 && X[j] === 0; ++j);
-    if (j == 8) w = X[7] = -1; else w = X[j];
-
-    me.x = X;
-    me.i = 0;
-
-    // Discard an initial 256 values.
-    for (j = 256; j > 0; --j) {
-      me.next();
-    }
-  }
-
-  init(me, seed);
-}
-
-function copy(f, t) {
-  t.x = f.x.slice();
-  t.i = f.i;
-  return t;
-}
-
-function impl(seed, opts) {
-  if (seed == null) seed = +(new Date);
-  var xg = new XorGen(seed),
-      state = opts && opts.state,
-      prng = function() { return (xg.next() >>> 0) / 0x100000000; };
-  prng.double = function() {
-    do {
-      var top = xg.next() >>> 11,
-          bot = (xg.next() >>> 0) / 0x100000000,
-          result = (top + bot) / (1 << 21);
-    } while (result === 0);
-    return result;
-  };
-  prng.int32 = xg.next;
-  prng.quick = prng;
-  if (state) {
-    if (state.x) copy(state, xg);
-    prng.state = function() { return copy(xg, {}); }
-  }
-  return prng;
-}
-
-if (module && module.exports) {
-  module.exports = impl;
-} else if (__webpack_require__(8) && __webpack_require__(20)) {
-  !(__WEBPACK_AMD_DEFINE_RESULT__ = function() { return impl; }.call(exports, __webpack_require__, exports, module),
-				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
-} else {
-  this.xorshift7 = impl;
-}
-
-})(
-  this,
-  (typeof module) == 'object' && module,    // present in node.js
-  __webpack_require__(8)   // present with an AMD loader
-);
-
-
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(19)(module)))
-
-/***/ }),
-/* 184 */
-/***/ (function(module, exports, __webpack_require__) {
-
-/* WEBPACK VAR INJECTION */(function(module) {var __WEBPACK_AMD_DEFINE_RESULT__;// A Javascript implementaion of Richard Brent's Xorgens xor4096 algorithm.
-//
-// This fast non-cryptographic random number generator is designed for
-// use in Monte-Carlo algorithms. It combines a long-period xorshift
-// generator with a Weyl generator, and it passes all common batteries
-// of stasticial tests for randomness while consuming only a few nanoseconds
-// for each prng generated.  For background on the generator, see Brent's
-// paper: "Some long-period random number generators using shifts and xors."
-// http://arxiv.org/pdf/1004.3115v1.pdf
-//
-// Usage:
-//
-// var xor4096 = require('xor4096');
-// random = xor4096(1);                        // Seed with int32 or string.
-// assert.equal(random(), 0.1520436450538547); // (0, 1) range, 53 bits.
-// assert.equal(random.int32(), 1806534897);   // signed int32, 32 bits.
-//
-// For nonzero numeric keys, this impelementation provides a sequence
-// identical to that by Brent's xorgens 3 implementaion in C.  This
-// implementation also provides for initalizing the generator with
-// string seeds, or for saving and restoring the state of the generator.
-//
-// On Chrome, this prng benchmarks about 2.1 times slower than
-// Javascript's built-in Math.random().
-
-(function(global, module, define) {
-
-function XorGen(seed) {
-  var me = this;
-
-  // Set up generator function.
-  me.next = function() {
-    var w = me.w,
-        X = me.X, i = me.i, t, v;
-    // Update Weyl generator.
-    me.w = w = (w + 0x61c88647) | 0;
-    // Update xor generator.
-    v = X[(i + 34) & 127];
-    t = X[i = ((i + 1) & 127)];
-    v ^= v << 13;
-    t ^= t << 17;
-    v ^= v >>> 15;
-    t ^= t >>> 12;
-    // Update Xor generator array state.
-    v = X[i] = v ^ t;
-    me.i = i;
-    // Result is the combination.
-    return (v + (w ^ (w >>> 16))) | 0;
-  };
-
-  function init(me, seed) {
-    var t, v, i, j, w, X = [], limit = 128;
-    if (seed === (seed | 0)) {
-      // Numeric seeds initialize v, which is used to generates X.
-      v = seed;
-      seed = null;
-    } else {
-      // String seeds are mixed into v and X one character at a time.
-      seed = seed + '\0';
-      v = 0;
-      limit = Math.max(limit, seed.length);
-    }
-    // Initialize circular array and weyl value.
-    for (i = 0, j = -32; j < limit; ++j) {
-      // Put the unicode characters into the array, and shuffle them.
-      if (seed) v ^= seed.charCodeAt((j + 32) % seed.length);
-      // After 32 shuffles, take v as the starting w value.
-      if (j === 0) w = v;
-      v ^= v << 10;
-      v ^= v >>> 15;
-      v ^= v << 4;
-      v ^= v >>> 13;
-      if (j >= 0) {
-        w = (w + 0x61c88647) | 0;     // Weyl.
-        t = (X[j & 127] ^= (v + w));  // Combine xor and weyl to init array.
-        i = (0 == t) ? i + 1 : 0;     // Count zeroes.
-      }
-    }
-    // We have detected all zeroes; make the key nonzero.
-    if (i >= 128) {
-      X[(seed && seed.length || 0) & 127] = -1;
-    }
-    // Run the generator 512 times to further mix the state before using it.
-    // Factoring this as a function slows the main generator, so it is just
-    // unrolled here.  The weyl generator is not advanced while warming up.
-    i = 127;
-    for (j = 4 * 128; j > 0; --j) {
-      v = X[(i + 34) & 127];
-      t = X[i = ((i + 1) & 127)];
-      v ^= v << 13;
-      t ^= t << 17;
-      v ^= v >>> 15;
-      t ^= t >>> 12;
-      X[i] = v ^ t;
-    }
-    // Storing state as object members is faster than using closure variables.
-    me.w = w;
-    me.X = X;
-    me.i = i;
-  }
-
-  init(me, seed);
-}
-
-function copy(f, t) {
-  t.i = f.i;
-  t.w = f.w;
-  t.X = f.X.slice();
-  return t;
-};
-
-function impl(seed, opts) {
-  if (seed == null) seed = +(new Date);
-  var xg = new XorGen(seed),
-      state = opts && opts.state,
-      prng = function() { return (xg.next() >>> 0) / 0x100000000; };
-  prng.double = function() {
-    do {
-      var top = xg.next() >>> 11,
-          bot = (xg.next() >>> 0) / 0x100000000,
-          result = (top + bot) / (1 << 21);
-    } while (result === 0);
-    return result;
-  };
-  prng.int32 = xg.next;
-  prng.quick = prng;
-  if (state) {
-    if (state.X) copy(state, xg);
-    prng.state = function() { return copy(xg, {}); }
-  }
-  return prng;
-}
-
-if (module && module.exports) {
-  module.exports = impl;
-} else if (__webpack_require__(8) && __webpack_require__(20)) {
-  !(__WEBPACK_AMD_DEFINE_RESULT__ = function() { return impl; }.call(exports, __webpack_require__, exports, module),
-				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
-} else {
-  this.xor4096 = impl;
-}
-
-})(
-  this,                                     // window object or global
-  (typeof module) == 'object' && module,    // present in node.js
-  __webpack_require__(8)   // present with an AMD loader
-);
-
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(19)(module)))
-
-/***/ }),
-/* 185 */
-/***/ (function(module, exports, __webpack_require__) {
-
-/* WEBPACK VAR INJECTION */(function(module) {var __WEBPACK_AMD_DEFINE_RESULT__;// A Javascript implementaion of the "Tyche-i" prng algorithm by
-// Samuel Neves and Filipe Araujo.
-// See https://eden.dei.uc.pt/~sneves/pubs/2011-snfa2.pdf
-
-(function(global, module, define) {
-
-function XorGen(seed) {
-  var me = this, strseed = '';
-
-  // Set up generator function.
-  me.next = function() {
-    var b = me.b, c = me.c, d = me.d, a = me.a;
-    b = (b << 25) ^ (b >>> 7) ^ c;
-    c = (c - d) | 0;
-    d = (d << 24) ^ (d >>> 8) ^ a;
-    a = (a - b) | 0;
-    me.b = b = (b << 20) ^ (b >>> 12) ^ c;
-    me.c = c = (c - d) | 0;
-    me.d = (d << 16) ^ (c >>> 16) ^ a;
-    return me.a = (a - b) | 0;
-  };
-
-  /* The following is non-inverted tyche, which has better internal
-   * bit diffusion, but which is about 25% slower than tyche-i in JS.
-  me.next = function() {
-    var a = me.a, b = me.b, c = me.c, d = me.d;
-    a = (me.a + me.b | 0) >>> 0;
-    d = me.d ^ a; d = d << 16 ^ d >>> 16;
-    c = me.c + d | 0;
-    b = me.b ^ c; b = b << 12 ^ d >>> 20;
-    me.a = a = a + b | 0;
-    d = d ^ a; me.d = d = d << 8 ^ d >>> 24;
-    me.c = c = c + d | 0;
-    b = b ^ c;
-    return me.b = (b << 7 ^ b >>> 25);
-  }
-  */
-
-  me.a = 0;
-  me.b = 0;
-  me.c = 2654435769 | 0;
-  me.d = 1367130551;
-
-  if (seed === Math.floor(seed)) {
-    // Integer seed.
-    me.a = (seed / 0x100000000) | 0;
-    me.b = seed | 0;
-  } else {
-    // String seed.
-    strseed += seed;
-  }
-
-  // Mix in string seed, then discard an initial batch of 64 values.
-  for (var k = 0; k < strseed.length + 20; k++) {
-    me.b ^= strseed.charCodeAt(k) | 0;
-    me.next();
-  }
-}
-
-function copy(f, t) {
-  t.a = f.a;
-  t.b = f.b;
-  t.c = f.c;
-  t.d = f.d;
-  return t;
-};
-
-function impl(seed, opts) {
-  var xg = new XorGen(seed),
-      state = opts && opts.state,
-      prng = function() { return (xg.next() >>> 0) / 0x100000000; };
-  prng.double = function() {
-    do {
-      var top = xg.next() >>> 11,
-          bot = (xg.next() >>> 0) / 0x100000000,
-          result = (top + bot) / (1 << 21);
-    } while (result === 0);
-    return result;
-  };
-  prng.int32 = xg.next;
-  prng.quick = prng;
-  if (state) {
-    if (typeof(state) == 'object') copy(state, xg);
-    prng.state = function() { return copy(xg, {}); }
-  }
-  return prng;
-}
-
-if (module && module.exports) {
-  module.exports = impl;
-} else if (__webpack_require__(8) && __webpack_require__(20)) {
-  !(__WEBPACK_AMD_DEFINE_RESULT__ = function() { return impl; }.call(exports, __webpack_require__, exports, module),
-				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
-} else {
-  this.tychei = impl;
-}
-
-})(
-  this,
-  (typeof module) == 'object' && module,    // present in node.js
-  __webpack_require__(8)   // present with an AMD loader
-);
-
-
-
-/* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(19)(module)))
-
-/***/ }),
-/* 186 */
-/***/ (function(module, exports, __webpack_require__) {
-
-var __WEBPACK_AMD_DEFINE_RESULT__;/*
-Copyright 2014 David Bau.
-
-Permission is hereby granted, free of charge, to any person obtaining
-a copy of this software and associated documentation files (the
-"Software"), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish,
-distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to
-the following conditions:
-
-The above copyright notice and this permission notice shall be
-included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-*/
-
-(function (pool, math) {
-//
-// The following constants are related to IEEE 754 limits.
-//
-var global = this,
-    width = 256,        // each RC4 output is 0 <= x < 256
-    chunks = 6,         // at least six RC4 outputs for each double
-    digits = 52,        // there are 52 significant digits in a double
-    rngname = 'random', // rngname: name for Math.random and Math.seedrandom
-    startdenom = math.pow(width, chunks),
-    significance = math.pow(2, digits),
-    overflow = significance * 2,
-    mask = width - 1,
-    nodecrypto;         // node.js crypto module, initialized at the bottom.
-
-//
-// seedrandom()
-// This is the seedrandom function described above.
-//
-function seedrandom(seed, options, callback) {
-  var key = [];
-  options = (options == true) ? { entropy: true } : (options || {});
-
-  // Flatten the seed string or build one from local entropy if needed.
-  var shortseed = mixkey(flatten(
-    options.entropy ? [seed, tostring(pool)] :
-    (seed == null) ? autoseed() : seed, 3), key);
-
-  // Use the seed to initialize an ARC4 generator.
-  var arc4 = new ARC4(key);
-
-  // This function returns a random double in [0, 1) that contains
-  // randomness in every bit of the mantissa of the IEEE 754 value.
-  var prng = function() {
-    var n = arc4.g(chunks),             // Start with a numerator n < 2 ^ 48
-        d = startdenom,                 //   and denominator d = 2 ^ 48.
-        x = 0;                          //   and no 'extra last byte'.
-    while (n < significance) {          // Fill up all significant digits by
-      n = (n + x) * width;              //   shifting numerator and
-      d *= width;                       //   denominator and generating a
-      x = arc4.g(1);                    //   new least-significant-byte.
-    }
-    while (n >= overflow) {             // To avoid rounding up, before adding
-      n /= 2;                           //   last byte, shift everything
-      d /= 2;                           //   right using integer math until
-      x >>>= 1;                         //   we have exactly the desired bits.
-    }
-    return (n + x) / d;                 // Form the number within [0, 1).
-  };
-
-  prng.int32 = function() { return arc4.g(4) | 0; }
-  prng.quick = function() { return arc4.g(4) / 0x100000000; }
-  prng.double = prng;
-
-  // Mix the randomness into accumulated entropy.
-  mixkey(tostring(arc4.S), pool);
-
-  // Calling convention: what to return as a function of prng, seed, is_math.
-  return (options.pass || callback ||
-      function(prng, seed, is_math_call, state) {
-        if (state) {
-          // Load the arc4 state from the given state if it has an S array.
-          if (state.S) { copy(state, arc4); }
-          // Only provide the .state method if requested via options.state.
-          prng.state = function() { return copy(arc4, {}); }
-        }
-
-        // If called as a method of Math (Math.seedrandom()), mutate
-        // Math.random because that is how seedrandom.js has worked since v1.0.
-        if (is_math_call) { math[rngname] = prng; return seed; }
-
-        // Otherwise, it is a newer calling convention, so return the
-        // prng directly.
-        else return prng;
-      })(
-  prng,
-  shortseed,
-  'global' in options ? options.global : (this == math),
-  options.state);
-}
-math['seed' + rngname] = seedrandom;
-
-//
-// ARC4
-//
-// An ARC4 implementation.  The constructor takes a key in the form of
-// an array of at most (width) integers that should be 0 <= x < (width).
-//
-// The g(count) method returns a pseudorandom integer that concatenates
-// the next (count) outputs from ARC4.  Its return value is a number x
-// that is in the range 0 <= x < (width ^ count).
-//
-function ARC4(key) {
-  var t, keylen = key.length,
-      me = this, i = 0, j = me.i = me.j = 0, s = me.S = [];
-
-  // The empty key [] is treated as [0].
-  if (!keylen) { key = [keylen++]; }
-
-  // Set up S using the standard key scheduling algorithm.
-  while (i < width) {
-    s[i] = i++;
-  }
-  for (i = 0; i < width; i++) {
-    s[i] = s[j = mask & (j + key[i % keylen] + (t = s[i]))];
-    s[j] = t;
-  }
-
-  // The "g" method returns the next (count) outputs as one number.
-  (me.g = function(count) {
-    // Using instance members instead of closure state nearly doubles speed.
-    var t, r = 0,
-        i = me.i, j = me.j, s = me.S;
-    while (count--) {
-      t = s[i = mask & (i + 1)];
-      r = r * width + s[mask & ((s[i] = s[j = mask & (j + t)]) + (s[j] = t))];
-    }
-    me.i = i; me.j = j;
-    return r;
-    // For robust unpredictability, the function call below automatically
-    // discards an initial batch of values.  This is called RC4-drop[256].
-    // See http://google.com/search?q=rsa+fluhrer+response&btnI
-  })(width);
-}
-
-//
-// copy()
-// Copies internal state of ARC4 to or from a plain object.
-//
-function copy(f, t) {
-  t.i = f.i;
-  t.j = f.j;
-  t.S = f.S.slice();
-  return t;
-};
-
-//
-// flatten()
-// Converts an object tree to nested arrays of strings.
-//
-function flatten(obj, depth) {
-  var result = [], typ = (typeof obj), prop;
-  if (depth && typ == 'object') {
-    for (prop in obj) {
-      try { result.push(flatten(obj[prop], depth - 1)); } catch (e) {}
-    }
-  }
-  return (result.length ? result : typ == 'string' ? obj : obj + '\0');
-}
-
-//
-// mixkey()
-// Mixes a string seed into a key that is an array of integers, and
-// returns a shortened string seed that is equivalent to the result key.
-//
-function mixkey(seed, key) {
-  var stringseed = seed + '', smear, j = 0;
-  while (j < stringseed.length) {
-    key[mask & j] =
-      mask & ((smear ^= key[mask & j] * 19) + stringseed.charCodeAt(j++));
-  }
-  return tostring(key);
-}
-
-//
-// autoseed()
-// Returns an object for autoseeding, using window.crypto and Node crypto
-// module if available.
-//
-function autoseed() {
-  try {
-    var out;
-    if (nodecrypto && (out = nodecrypto.randomBytes)) {
-      // The use of 'out' to remember randomBytes makes tight minified code.
-      out = out(width);
-    } else {
-      out = new Uint8Array(width);
-      (global.crypto || global.msCrypto).getRandomValues(out);
-    }
-    return tostring(out);
-  } catch (e) {
-    var browser = global.navigator,
-        plugins = browser && browser.plugins;
-    return [+new Date, global, plugins, global.screen, tostring(pool)];
-  }
-}
-
-//
-// tostring()
-// Converts an array of charcodes to a string
-//
-function tostring(a) {
-  return String.fromCharCode.apply(0, a);
-}
-
-//
-// When seedrandom.js is loaded, we immediately mix a few bits
-// from the built-in RNG into the entropy pool.  Because we do
-// not want to interfere with deterministic PRNG state later,
-// seedrandom will not call math.random on its own again after
-// initialization.
-//
-mixkey(math.random(), pool);
-
-//
-// Nodejs and AMD support: export the implementation as a module using
-// either convention.
-//
-if ((typeof module) == 'object' && module.exports) {
-  module.exports = seedrandom;
-  // When in node.js, try using crypto package for autoseeding.
-  try {
-    nodecrypto = __webpack_require__(187);
-  } catch (ex) {}
-} else if (true) {
-  !(__WEBPACK_AMD_DEFINE_RESULT__ = function() { return seedrandom; }.call(exports, __webpack_require__, exports, module),
-				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));
-}
-
-// End anonymous scope, and pass initial values.
-})(
-  [],     // pool: entropy pool starts empty
-  Math    // math: package containing random, pow, and seedrandom
-);
-
-
-/***/ }),
-/* 187 */
-/***/ (function(module, exports) {
-
-/* (ignored) */
-
-/***/ }),
-/* 188 */
+/* 192 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -40784,7 +42313,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 189 */
+/* 193 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -40800,7 +42329,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _Framebuffer = __webpack_require__(56);
+var _Framebuffer = __webpack_require__(57);
 
 var _Framebuffer2 = _interopRequireDefault(_Framebuffer);
 
@@ -40834,47 +42363,53 @@ function vtkForwardPass(publicAPI, model) {
     publicAPI.setCurrentOperation('buildPass');
     viewNode.traverse(publicAPI);
 
-    // check for both opaque and volume actors
-    model.opaqueActorCount = 0;
-    model.translucentActorCount = 0;
-    model.volumeCount = 0;
-    publicAPI.setCurrentOperation('queryPass');
+    // iterate over renderers
+    var renderers = viewNode.getChildren();
+    for (var index = 0; index < renderers.length; index++) {
+      var renNode = renderers[index];
 
-    viewNode.traverse(publicAPI);
+      // check for both opaque and volume actors
+      model.opaqueActorCount = 0;
+      model.translucentActorCount = 0;
+      model.volumeCount = 0;
+      publicAPI.setCurrentOperation('queryPass');
 
-    // do we need to capture a zbuffer?
-    if (model.opaqueActorCount > 0 && model.volumeCount > 0 || model.depthRequested) {
-      var size = viewNode.getSize();
-      // make sure the framebuffer is setup
-      if (model.framebuffer === null) {
-        model.framebuffer = _Framebuffer2.default.newInstance();
+      renNode.traverse(publicAPI);
+
+      // do we need to capture a zbuffer?
+      if (model.opaqueActorCount > 0 && model.volumeCount > 0 || model.depthRequested) {
+        var size = viewNode.getSize();
+        // make sure the framebuffer is setup
+        if (model.framebuffer === null) {
+          model.framebuffer = _Framebuffer2.default.newInstance();
+        }
+        model.framebuffer.setOpenGLRenderWindow(viewNode);
+        model.framebuffer.saveCurrentBindingsAndBuffers();
+        var fbSize = model.framebuffer.getSize();
+        if (fbSize === null || fbSize[0] !== size[0] || fbSize[1] !== size[1]) {
+          model.framebuffer.create(size[0], size[1]);
+          model.framebuffer.populateFramebuffer();
+        }
+        model.framebuffer.bind();
+        publicAPI.setCurrentOperation('opaqueZBufferPass');
+        renNode.traverse(publicAPI);
+        model.framebuffer.restorePreviousBindingsAndBuffers();
       }
-      model.framebuffer.setOpenGLRenderWindow(viewNode);
-      model.framebuffer.saveCurrentBindingsAndBuffers();
-      var fbSize = model.framebuffer.getSize();
-      if (fbSize === null || fbSize[0] !== size[0] || fbSize[1] !== size[1]) {
-        model.framebuffer.create(size[0], size[1]);
-        model.framebuffer.populateFramebuffer();
-      }
-      model.framebuffer.bind();
-      publicAPI.setCurrentOperation('opaqueZBufferPass');
-      viewNode.traverse(publicAPI);
-      model.framebuffer.restorePreviousBindingsAndBuffers();
-    }
 
-    publicAPI.setCurrentOperation('cameraPass');
-    viewNode.traverse(publicAPI);
-    if (model.opaqueActorCount > 0) {
-      publicAPI.setCurrentOperation('opaquePass');
-      viewNode.traverse(publicAPI);
-    }
-    if (model.translucentActorCount > 0) {
-      publicAPI.setCurrentOperation('translucentPass');
-      viewNode.traverse(publicAPI);
-    }
-    if (model.volumeCount > 0) {
-      publicAPI.setCurrentOperation('volumePass');
-      viewNode.traverse(publicAPI);
+      publicAPI.setCurrentOperation('cameraPass');
+      renNode.traverse(publicAPI);
+      if (model.opaqueActorCount > 0) {
+        publicAPI.setCurrentOperation('opaquePass');
+        renNode.traverse(publicAPI);
+      }
+      if (model.translucentActorCount > 0) {
+        publicAPI.setCurrentOperation('translucentPass');
+        renNode.traverse(publicAPI);
+      }
+      if (model.volumeCount > 0) {
+        publicAPI.setCurrentOperation('volumePass');
+        renNode.traverse(publicAPI);
+      }
     }
   };
 
@@ -40934,7 +42469,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 190 */
+/* 194 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -40950,43 +42485,43 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _GenericWidgetRepresentation = __webpack_require__(191);
+var _GenericWidgetRepresentation = __webpack_require__(195);
 
 var _GenericWidgetRepresentation2 = _interopRequireDefault(_GenericWidgetRepresentation);
 
-var _ViewNodeFactory = __webpack_require__(192);
+var _ViewNodeFactory = __webpack_require__(196);
 
 var _ViewNodeFactory2 = _interopRequireDefault(_ViewNodeFactory);
 
-var _Actor = __webpack_require__(193);
+var _Actor = __webpack_require__(197);
 
 var _Actor2 = _interopRequireDefault(_Actor);
 
-var _Actor2D = __webpack_require__(194);
+var _Actor2D = __webpack_require__(198);
 
 var _Actor2D2 = _interopRequireDefault(_Actor2D);
 
-var _Camera = __webpack_require__(195);
+var _Camera = __webpack_require__(199);
 
 var _Camera2 = _interopRequireDefault(_Camera);
 
-var _Glyph3DMapper = __webpack_require__(196);
+var _Glyph3DMapper = __webpack_require__(200);
 
 var _Glyph3DMapper2 = _interopRequireDefault(_Glyph3DMapper);
 
-var _ImageMapper = __webpack_require__(208);
+var _ImageMapper = __webpack_require__(212);
 
 var _ImageMapper2 = _interopRequireDefault(_ImageMapper);
 
-var _ImageSlice = __webpack_require__(210);
+var _ImageSlice = __webpack_require__(214);
 
 var _ImageSlice2 = _interopRequireDefault(_ImageSlice);
 
-var _PixelSpaceCallbackMapper = __webpack_require__(211);
+var _PixelSpaceCallbackMapper = __webpack_require__(215);
 
 var _PixelSpaceCallbackMapper2 = _interopRequireDefault(_PixelSpaceCallbackMapper);
 
-var _PolyDataMapper = __webpack_require__(34);
+var _PolyDataMapper = __webpack_require__(36);
 
 var _PolyDataMapper2 = _interopRequireDefault(_PolyDataMapper);
 
@@ -40994,27 +42529,27 @@ var _RenderWindow = __webpack_require__(102);
 
 var _RenderWindow2 = _interopRequireDefault(_RenderWindow);
 
-var _Renderer = __webpack_require__(212);
+var _Renderer = __webpack_require__(216);
 
 var _Renderer2 = _interopRequireDefault(_Renderer);
 
-var _SphereMapper = __webpack_require__(213);
+var _SphereMapper = __webpack_require__(217);
 
 var _SphereMapper2 = _interopRequireDefault(_SphereMapper);
 
-var _StickMapper = __webpack_require__(215);
+var _StickMapper = __webpack_require__(219);
 
 var _StickMapper2 = _interopRequireDefault(_StickMapper);
 
-var _Texture = __webpack_require__(24);
+var _Texture = __webpack_require__(26);
 
 var _Texture2 = _interopRequireDefault(_Texture);
 
-var _Volume = __webpack_require__(217);
+var _Volume = __webpack_require__(221);
 
 var _Volume2 = _interopRequireDefault(_Volume);
 
-var _VolumeMapper = __webpack_require__(218);
+var _VolumeMapper = __webpack_require__(222);
 
 var _VolumeMapper2 = _interopRequireDefault(_VolumeMapper);
 
@@ -41076,7 +42611,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 191 */
+/* 195 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -41136,7 +42671,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend);
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 192 */
+/* 196 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -41226,7 +42761,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 193 */
+/* 197 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -41437,7 +42972,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend);
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 194 */
+/* 198 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -41593,7 +43128,7 @@ var newInstance = exports.newInstance = macro.newInstance(extend);
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 195 */
+/* 199 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -41650,7 +43185,7 @@ function vtkOpenGLCamera(publicAPI, model) {
   publicAPI.getKeyMatrices = function (ren) {
     // has the camera changed?
     if (ren !== model.lastRenderer || model.openGLRenderWindow.getMTime() > model.keyMatrixTime.getMTime() || publicAPI.getMTime() > model.keyMatrixTime.getMTime() || ren.getMTime() > model.keyMatrixTime.getMTime()) {
-      _glMatrix.mat4.copy(model.keyMatrices.wcvc, model.renderable.getViewTransformMatrix());
+      _glMatrix.mat4.copy(model.keyMatrices.wcvc, model.renderable.getViewMatrix());
 
       _glMatrix.mat3.fromMat4(model.keyMatrices.normalMatrix, model.keyMatrices.wcvc);
       _glMatrix.mat3.invert(model.keyMatrices.normalMatrix, model.keyMatrices.normalMatrix);
@@ -41658,11 +43193,10 @@ function vtkOpenGLCamera(publicAPI, model) {
 
       var aspectRatio = model.openGLRenderer.getAspectRatio();
 
-      _glMatrix.mat4.copy(model.keyMatrices.vcdc, model.renderable.getProjectionTransformMatrix(aspectRatio, -1, 1));
+      _glMatrix.mat4.copy(model.keyMatrices.vcdc, model.renderable.getProjectionMatrix(aspectRatio, -1, 1));
       _glMatrix.mat4.transpose(model.keyMatrices.vcdc, model.keyMatrices.vcdc);
 
       _glMatrix.mat4.multiply(model.keyMatrices.wcdc, model.keyMatrices.vcdc, model.keyMatrices.wcvc);
-      //      mat4.multiply(model.WCDCMatrix, model.WCVCMatrix, model.VCDCMatrix);
 
       model.keyMatrixTime.modified();
       model.lastRenderer = ren;
@@ -41719,7 +43253,7 @@ var newInstance = exports.newInstance = macro.newInstance(extend);
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 196 */
+/* 200 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -41737,15 +43271,15 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _BufferObject = __webpack_require__(32);
+var _BufferObject = __webpack_require__(34);
 
 var _BufferObject2 = _interopRequireDefault(_BufferObject);
 
-var _Property = __webpack_require__(57);
+var _Property = __webpack_require__(58);
 
 var _Property2 = _interopRequireDefault(_Property);
 
-var _PolyDataMapper = __webpack_require__(34);
+var _PolyDataMapper = __webpack_require__(36);
 
 var _PolyDataMapper2 = _interopRequireDefault(_PolyDataMapper);
 
@@ -41794,6 +43328,14 @@ function vtkOpenGLGlyph3DMapper(publicAPI, model) {
 
     // apply faceCulling
     var gl = model.context;
+    if (model.openGLRenderWindow.getWebgl2()) {
+      model.hardwareSupport = true;
+      model.extension = null;
+    } else if (!model.extension) {
+      model.extension = model.context.getExtension('ANGLE_instanced_arrays');
+      model.hardwareSupport = !!model.extension;
+    }
+
     var backfaceCulling = actor.getProperty().getBackfaceCulling();
     var frontfaceCulling = actor.getProperty().getFrontfaceCulling();
     if (!backfaceCulling && !frontfaceCulling) {
@@ -41839,19 +43381,28 @@ function vtkOpenGLGlyph3DMapper(publicAPI, model) {
     out[2] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
     out[3] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
 
-    b0 = b[off + 4];b1 = b[off + 5];b2 = b[off + 6];b3 = b[off + 7];
+    b0 = b[off + 4];
+    b1 = b[off + 5];
+    b2 = b[off + 6];
+    b3 = b[off + 7];
     out[4] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
     out[5] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
     out[6] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
     out[7] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
 
-    b0 = b[off + 8];b1 = b[off + 9];b2 = b[off + 10];b3 = b[off + 11];
+    b0 = b[off + 8];
+    b1 = b[off + 9];
+    b2 = b[off + 10];
+    b3 = b[off + 11];
     out[8] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
     out[9] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
     out[10] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
     out[11] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
 
-    b0 = b[off + 12];b1 = b[off + 13];b2 = b[off + 14];b3 = b[off + 15];
+    b0 = b[off + 12];
+    b1 = b[off + 13];
+    b2 = b[off + 14];
+    b3 = b[off + 15];
     out[12] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
     out[13] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
     out[14] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
@@ -41859,22 +43410,24 @@ function vtkOpenGLGlyph3DMapper(publicAPI, model) {
   };
 
   publicAPI.replaceShaderNormal = function (shaders, ren, actor) {
-    var lastLightComplexity = model.lastBoundBO.getReferenceByName('lastLightComplexity');
+    if (model.hardwareSupport) {
+      var lastLightComplexity = model.lastBoundBO.getReferenceByName('lastLightComplexity');
 
-    if (lastLightComplexity > 0) {
-      var VSSource = shaders.Vertex;
+      if (lastLightComplexity > 0) {
+        var VSSource = shaders.Vertex;
 
-      if (model.lastBoundBO.getCABO().getNormalOffset()) {
-        VSSource = _ShaderProgram2.default.substitute(VSSource, '//VTK::Normal::Dec', ['attribute vec3 normalMC;', 'attribute mat3 gNormal;', 'uniform mat3 normalMatrix;', 'varying vec3 normalVCVSOutput;']).result;
-        VSSource = _ShaderProgram2.default.substitute(VSSource, '//VTK::Normal::Impl', ['normalVCVSOutput = normalMatrix * gNormal * normalMC;']).result;
+        if (model.lastBoundBO.getCABO().getNormalOffset()) {
+          VSSource = _ShaderProgram2.default.substitute(VSSource, '//VTK::Normal::Dec', ['attribute vec3 normalMC;', 'attribute mat3 gNormal;', 'uniform mat3 normalMatrix;', 'varying vec3 normalVCVSOutput;']).result;
+          VSSource = _ShaderProgram2.default.substitute(VSSource, '//VTK::Normal::Impl', ['normalVCVSOutput = normalMatrix * gNormal * normalMC;']).result;
+        }
+        shaders.Vertex = VSSource;
       }
-      shaders.Vertex = VSSource;
     }
     superClass.replaceShaderNormal(shaders, ren, actor);
   };
 
   publicAPI.replaceShaderColor = function (shaders, ren, actor) {
-    if (model.openGLRenderWindow.getWebgl2() && model.renderable.getColorArray()) {
+    if (model.hardwareSupport && model.renderable.getColorArray()) {
       var VSSource = shaders.Vertex;
       var GSSource = shaders.Geometry;
       var FSSource = shaders.Fragment;
@@ -41921,7 +43474,7 @@ function vtkOpenGLGlyph3DMapper(publicAPI, model) {
   };
 
   publicAPI.replaceShaderPositionVC = function (shaders, ren, actor) {
-    if (model.openGLRenderWindow.getWebgl2()) {
+    if (model.hardwareSupport) {
       var VSSource = shaders.Vertex;
 
       // do we need the vertex in the shader in View Coordinates
@@ -42035,8 +43588,12 @@ function vtkOpenGLGlyph3DMapper(publicAPI, model) {
         var normalMatrixUsed = program.isUniformUsed('normalMatrix');
         var mcvcMatrixUsed = program.isUniformUsed('MCVCMatrix');
 
-        if (model.openGLRenderWindow.getWebgl2()) {
-          gl.drawArraysInstanced(mode, 0, cabo.getElementCount(), numPts);
+        if (model.hardwareSupport) {
+          if (model.extension) {
+            model.extension.drawArraysInstancedANGLE(mode, 0, cabo.getElementCount(), numPts);
+          } else {
+            gl.drawArraysInstanced(mode, 0, cabo.getElementCount(), numPts);
+          }
         } else {
           // draw the array multiple times with different cam matrix
           for (var p = 0; p < numPts; ++p) {
@@ -42092,7 +43649,7 @@ function vtkOpenGLGlyph3DMapper(publicAPI, model) {
   };
 
   publicAPI.buildBufferObjects = function (ren, actor) {
-    if (model.openGLRenderWindow.getWebgl2()) {
+    if (model.hardwareSupport) {
       // update the buffer objects if needed
       var garray = model.renderable.getMatrixArray();
       var narray = model.renderable.getNormalArray();
@@ -42108,7 +43665,11 @@ function vtkOpenGLGlyph3DMapper(publicAPI, model) {
       if (model.renderable.getBuildTime().getMTime() > model.glyphBOBuildTime.getMTime()) {
         model.matrixBuffer.upload(garray, ObjectType.ARRAY_BUFFER);
         model.normalBuffer.upload(narray, ObjectType.ARRAY_BUFFER);
-        model.colorBuffer.upload(carray.getData(), ObjectType.ARRAY_BUFFER);
+        if (carray) {
+          model.colorBuffer.upload(carray.getData(), ObjectType.ARRAY_BUFFER);
+        } else {
+          model.colorBuffer.releaseGraphicsResources();
+        }
         model.glyphBOBuildTime.modified();
       }
     }
@@ -42158,7 +43719,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 197 */
+/* 201 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -42174,19 +43735,19 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _Constants = __webpack_require__(198);
+var _Constants = __webpack_require__(202);
 
 var _Constants2 = _interopRequireDefault(_Constants);
 
-var _Framebuffer = __webpack_require__(56);
+var _Framebuffer = __webpack_require__(57);
 
 var _Framebuffer2 = _interopRequireDefault(_Framebuffer);
 
-var _SelectionNode = __webpack_require__(199);
+var _SelectionNode = __webpack_require__(203);
 
 var _SelectionNode2 = _interopRequireDefault(_SelectionNode);
 
-var _DataSet = __webpack_require__(51);
+var _DataSet = __webpack_require__(53);
 
 var _DataSet2 = _interopRequireDefault(_DataSet);
 
@@ -42547,7 +44108,11 @@ function vtkOpenGLHardwareSelector(publicAPI, model) {
         if (info && info.valid) {
           var hash = publicAPI.getInfoHash(info);
           if (!dataMap.has(hash)) {
-            dataMap.set(hash, { info: info, pixelCount: 1, attributeIDs: [info.attributeID] });
+            dataMap.set(hash, {
+              info: info,
+              pixelCount: 1,
+              attributeIDs: [info.attributeID]
+            });
           } else {
             dataMap.get(hash).pixelCount++;
             if (dataMap.get(hash).attributeIDs.indexOf(info.attributeID) === -1) {
@@ -42615,7 +44180,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, _Constants2.default);
 
 /***/ }),
-/* 198 */
+/* 202 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -42637,7 +44202,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 199 */
+/* 203 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -42653,7 +44218,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _Constants = __webpack_require__(200);
+var _Constants = __webpack_require__(204);
 
 var _Constants2 = _interopRequireDefault(_Constants);
 
@@ -42708,7 +44273,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, _Constants2.default);
 
 /***/ }),
-/* 200 */
+/* 204 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -42762,7 +44327,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 201 */
+/* 205 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -42778,13 +44343,13 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _BufferObject = __webpack_require__(32);
+var _BufferObject = __webpack_require__(34);
 
 var _BufferObject2 = _interopRequireDefault(_BufferObject);
 
-var _Constants = __webpack_require__(25);
+var _Constants = __webpack_require__(27);
 
-var _Constants2 = __webpack_require__(33);
+var _Constants2 = __webpack_require__(35);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -43074,7 +44639,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend);
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 202 */
+/* 206 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -43194,7 +44759,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 203 */
+/* 207 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -43209,7 +44774,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _AbstractMapper = __webpack_require__(204);
+var _AbstractMapper = __webpack_require__(208);
 
 var _AbstractMapper2 = _interopRequireDefault(_AbstractMapper);
 
@@ -43327,7 +44892,7 @@ function extend(publicAPI, model) {
 exports.default = { extend: extend };
 
 /***/ }),
-/* 204 */
+/* 208 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -43424,7 +44989,7 @@ function extend(publicAPI, model) {
 exports.default = { extend: extend };
 
 /***/ }),
-/* 205 */
+/* 209 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -43448,7 +45013,7 @@ var _ScalarsToColors = __webpack_require__(99);
 
 var _ScalarsToColors2 = _interopRequireDefault(_ScalarsToColors);
 
-var _Constants = __webpack_require__(55);
+var _Constants = __webpack_require__(56);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -43646,6 +45211,7 @@ function vtkLookupTable(publicAPI, model) {
     // Add "special" colors (NaN, below range, above range) to table here.
     var numberOfColors = model.numberOfColors;
 
+
     var tptr = model.table;
     var base = (model.numberOfColors + BELOW_RANGE_COLOR_INDEX) * 4;
 
@@ -43767,7 +45333,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend });
 
 /***/ }),
-/* 206 */
+/* 210 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -43796,7 +45362,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 207 */
+/* 211 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -43863,7 +45429,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 208 */
+/* 212 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -43877,7 +45443,7 @@ exports.extend = extend;
 
 var _glMatrix = __webpack_require__(3);
 
-var _Constants = __webpack_require__(209);
+var _Constants = __webpack_require__(213);
 
 var _Constants2 = _interopRequireDefault(_Constants);
 
@@ -43885,13 +45451,13 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _DataArray = __webpack_require__(5);
+var _DataArray = __webpack_require__(4);
 
 var _DataArray2 = _interopRequireDefault(_DataArray);
 
 var _Constants3 = __webpack_require__(9);
 
-var _Helper = __webpack_require__(58);
+var _Helper = __webpack_require__(59);
 
 var _Helper2 = _interopRequireDefault(_Helper);
 
@@ -43899,7 +45465,7 @@ var _Math = __webpack_require__(1);
 
 var _Math2 = _interopRequireDefault(_Math);
 
-var _Texture = __webpack_require__(24);
+var _Texture = __webpack_require__(26);
 
 var _Texture2 = _interopRequireDefault(_Texture);
 
@@ -43911,15 +45477,15 @@ var _ViewNode = __webpack_require__(6);
 
 var _ViewNode2 = _interopRequireDefault(_ViewNode);
 
-var _Constants4 = __webpack_require__(33);
+var _Constants4 = __webpack_require__(35);
 
-var _Constants5 = __webpack_require__(31);
+var _Constants5 = __webpack_require__(33);
 
 var _vtkPolyDataVS = __webpack_require__(105);
 
 var _vtkPolyDataVS2 = _interopRequireDefault(_vtkPolyDataVS);
 
-var _vtkPolyDataFS = __webpack_require__(36);
+var _vtkPolyDataFS = __webpack_require__(38);
 
 var _vtkPolyDataFS2 = _interopRequireDefault(_vtkPolyDataFS);
 
@@ -43947,9 +45513,9 @@ function vtkOpenGLImageMapper(publicAPI, model) {
       model.colorTexture.setOpenGLRenderWindow(model.openGLRenderWindow);
       var ren = model.openGLRenderer.getRenderable();
       model.openGLCamera = model.openGLRenderer.getViewNodeFor(ren.getActiveCamera());
-      // is zslice set by the camera
+      // is slice set by the camera
       if (model.renderable.getSliceAtFocalPoint()) {
-        model.renderable.setZSliceFromCamera(ren.getActiveCamera());
+        model.renderable.setSliceFromCamera(ren.getActiveCamera());
       }
     }
   };
@@ -43957,6 +45523,15 @@ function vtkOpenGLImageMapper(publicAPI, model) {
   publicAPI.translucentPass = function (prepass) {
     if (prepass) {
       publicAPI.render();
+    }
+  };
+
+  publicAPI.opaqueZBufferPass = function (prepass) {
+    if (prepass) {
+      model.haveSeenDepthRequest = true;
+      model.renderDepth = true;
+      publicAPI.render();
+      model.renderDepth = false;
     }
   };
 
@@ -43996,6 +45571,7 @@ function vtkOpenGLImageMapper(publicAPI, model) {
     var tNumComp = model.openGLTexture.getComponents();
 
     VSSource = _ShaderProgram2.default.substitute(VSSource, '//VTK::TCoord::Dec', 'attribute vec2 tcoordMC; varying vec2 tcoordVCVSOutput;').result;
+
     FSSource = _ShaderProgram2.default.substitute(FSSource, '//VTK::TCoord::Dec', ['varying vec2 tcoordVCVSOutput;', 'uniform float shift;', 'uniform float scale;', 'uniform sampler2D texture1;', 'uniform sampler2D colorTexture1;']).result;
     switch (tNumComp) {
       case 1:
@@ -44005,8 +45581,14 @@ function vtkOpenGLImageMapper(publicAPI, model) {
         FSSource = _ShaderProgram2.default.substitute(FSSource, '//VTK::TCoord::Impl', ['vec4 tcolor = texture2D(texture1, tcoordVCVSOutput);', 'float intensity = tcolor.r*scale + shift;', 'gl_FragData[0] = vec4(texture2D(colorTexture1, vec2(intensity, 0.5)), scale*tcolor.g + shift);']).result;
         break;
       default:
-        FSSource = _ShaderProgram2.default.substitute(FSSource, '//VTK::TCoord::Impl', ['vec4 tcolor = scale*texture2D(texture1, tcoordVCVSOutput.st) + shift;', 'gl_FragData[0] = vec4(texture2D(colorTexture1, vec2(tcolor.r,0.5)),', '  texture2D(colorTexture1, vec2(tcolor.g,0.5)),', '  texture2D(colorTexture1, vec2(tcolor.b,0.5)), tcolor.a);']).result;
+        FSSource = _ShaderProgram2.default.substitute(FSSource, '//VTK::TCoord::Impl', ['vec4 tcolor = scale*texture2D(texture1, tcoordVCVSOutput.st) + shift;', 'gl_FragData[0] = vec4(texture2D(colorTexture1, vec2(tcolor.r,0.5)).r,', '  texture2D(colorTexture1, vec2(tcolor.g,0.5)).r,', '  texture2D(colorTexture1, vec2(tcolor.b,0.5)).r, tcolor.a);']).result;
     }
+
+    if (model.haveSeenDepthRequest) {
+      FSSource = _ShaderProgram2.default.substitute(FSSource, '//VTK::ZBuffer::Dec', 'uniform int depthRequest;').result;
+      FSSource = _ShaderProgram2.default.substitute(FSSource, '//VTK::ZBuffer::Impl', ['if (depthRequest == 1) {', 'float iz = floor(gl_FragCoord.z*65535.0 + 0.1);', 'float rf = floor(iz/256.0)/255.0;', 'float gf = mod(iz,256.0)/255.0;', 'gl_FragData[0] = vec4(rf, gf, 0.0, 1.0); }']).result;
+    }
+
     shaders.Vertex = VSSource;
     shaders.Fragment = FSSource;
   };
@@ -44017,7 +45599,12 @@ function vtkOpenGLImageMapper(publicAPI, model) {
     // property modified (representation interpolation and lighting)
     // input modified
     // light complexity changed
-    if (cellBO.getProgram() === 0 || cellBO.getShaderSourceTime().getMTime() < publicAPI.getMTime() || cellBO.getShaderSourceTime().getMTime() < actor.getMTime() || cellBO.getShaderSourceTime().getMTime() < model.currentInput.getMTime()) {
+
+    var tNumComp = model.openGLTexture.getComponents();
+
+    if (model.lastHaveSeenDepthRequest !== model.haveSeenDepthRequest || cellBO.getProgram() === 0 || model.lastTextureComponents !== tNumComp) {
+      model.lastHaveSeenDepthRequest = model.haveSeenDepthRequest;
+      model.lastTextureComponents = tNumComp;
       return true;
     }
 
@@ -44087,6 +45674,10 @@ function vtkOpenGLImageMapper(publicAPI, model) {
     var scale = oglShiftScale.scale / cw;
     var shift = (oglShiftScale.shift - cl) / cw + 0.5;
 
+    if (model.haveSeenDepthRequest) {
+      cellBO.getProgram().setUniformi('depthRequest', model.renderDepth ? 1 : 0);
+    }
+
     cellBO.getProgram().setUniformf('shift', shift);
     cellBO.getProgram().setUniformf('scale', scale);
 
@@ -44097,11 +45688,14 @@ function vtkOpenGLImageMapper(publicAPI, model) {
   publicAPI.setCameraShaderParameters = function (cellBO, ren, actor) {
     var program = cellBO.getProgram();
 
+    var actMats = model.openGLImageSlice.getKeyMatrices();
     var image = model.currentInput;
     var i2wmat4 = image.getIndexToWorld();
+    _glMatrix.mat4.multiply(model.imagemat, actMats.mcwc, i2wmat4);
 
     var keyMats = model.openGLCamera.getKeyMatrices(ren);
-    _glMatrix.mat4.multiply(model.imagemat, keyMats.wcdc, i2wmat4);
+    _glMatrix.mat4.multiply(model.imagemat, keyMats.wcdc, model.imagemat);
+
     program.setUniformMatrix('MCDCMatrix', model.imagemat);
   };
 
@@ -44228,13 +45822,17 @@ function vtkOpenGLImageMapper(publicAPI, model) {
 
     // rebuild the VBO if the data has changed
     var nSlice = model.renderable.getZSlice();
+    var ext = image.getExtent();
+    var sliceOffset = nSlice - ext[4];
     if (model.renderable.getCurrentSlicingMode() === SlicingMode.X) {
       nSlice = model.renderable.getXSlice();
+      sliceOffset = nSlice - ext[0];
     }
     if (model.renderable.getCurrentSlicingMode() === SlicingMode.Y) {
       nSlice = model.renderable.getYSlice();
+      sliceOffset = nSlice - ext[2];
     }
-    var toString = nSlice + 'A' + image.getMTime() + 'A' + image.getPointData().getScalars().getMTime() + 'B' + publicAPI.getMTime();
+    var toString = nSlice + 'A' + image.getMTime() + 'A' + image.getPointData().getScalars().getMTime() + 'B' + publicAPI.getMTime() + 'C' + model.renderable.getCurrentSlicingMode();
     if (model.VBOBuildString !== toString) {
       // Build the VBOs
       var dims = image.getDimensions();
@@ -44250,25 +45848,21 @@ function vtkOpenGLImageMapper(publicAPI, model) {
       var numComp = image.getPointData().getScalars().getNumberOfComponents();
       var sliceSize = dims[0] * dims[1] * numComp;
 
-      var ext = image.getExtent();
       var ptsArray = new Float32Array(12);
       var tcoordArray = new Float32Array(8);
       for (var _i2 = 0; _i2 < 4; _i2++) {
-        ptsArray[_i2 * 3] = _i2 % 2 ? ext[1] : ext[0];
-        ptsArray[_i2 * 3 + 1] = _i2 > 1 ? ext[3] : ext[2];
-        ptsArray[_i2 * 3 + 2] = nSlice;
         tcoordArray[_i2 * 2] = _i2 % 2 ? 1.0 : 0.0;
         tcoordArray[_i2 * 2 + 1] = _i2 > 1 ? 1.0 : 0.0;
       }
 
       var basicScalars = image.getPointData().getScalars().getData();
-      var scalars = basicScalars.subarray(nSlice * sliceSize, (nSlice + 1) * sliceSize);
+      var scalars = null;
       // Get right scalars according to slicing mode
       if (model.renderable.getCurrentSlicingMode() === SlicingMode.X) {
         scalars = [];
         for (var k = 0; k < dims[2]; k++) {
           for (var j = 0; j < dims[1]; j++) {
-            scalars.push(basicScalars[nSlice + j * dims[0] + k * dims[0] * dims[1]]);
+            scalars.push(basicScalars[sliceOffset + j * dims[0] + k * dims[0] * dims[1]]);
           }
         }
         dims[0] = dims[1];
@@ -44285,12 +45879,11 @@ function vtkOpenGLImageMapper(publicAPI, model) {
         ptsArray[9] = nSlice;
         ptsArray[10] = ext[3];
         ptsArray[11] = ext[5];
-      }
-      if (model.renderable.getCurrentSlicingMode() === SlicingMode.Y) {
+      } else if (model.renderable.getCurrentSlicingMode() === SlicingMode.Y) {
         scalars = [];
         for (var _k = 0; _k < dims[2]; _k++) {
           for (var _i3 = 0; _i3 < dims[0]; _i3++) {
-            scalars.push(basicScalars[_i3 + nSlice * dims[0] + _k * dims[0] * dims[1]]);
+            scalars.push(basicScalars[_i3 + sliceOffset * dims[0] + _k * dims[0] * dims[1]]);
           }
         }
         dims[1] = dims[2];
@@ -44306,9 +45899,8 @@ function vtkOpenGLImageMapper(publicAPI, model) {
         ptsArray[9] = ext[1];
         ptsArray[10] = nSlice;
         ptsArray[11] = ext[5];
-      }
-
-      if (model.renderable.getCurrentSlicingMode() === SlicingMode.Z) {
+      } else {
+        scalars = basicScalars.subarray(sliceOffset * sliceSize, (sliceOffset + 1) * sliceSize);
         ptsArray[0] = ext[0];
         ptsArray[1] = ext[2];
         ptsArray[2] = nSlice;
@@ -44328,9 +45920,15 @@ function vtkOpenGLImageMapper(publicAPI, model) {
       model.openGLTexture.sendParameters();
       model.openGLTexture.deactivate();
 
-      var points = _DataArray2.default.newInstance({ numberOfComponents: 3, values: ptsArray });
+      var points = _DataArray2.default.newInstance({
+        numberOfComponents: 3,
+        values: ptsArray
+      });
       points.setName('points');
-      var tcoords = _DataArray2.default.newInstance({ numberOfComponents: 2, values: tcoordArray });
+      var tcoords = _DataArray2.default.newInstance({
+        numberOfComponents: 2,
+        values: tcoordArray
+      });
       tcoords.setName('tcoords');
 
       var cellArray = new Uint16Array(8);
@@ -44342,9 +45940,16 @@ function vtkOpenGLImageMapper(publicAPI, model) {
       cellArray[5] = 0;
       cellArray[6] = 3;
       cellArray[7] = 2;
-      var cells = _DataArray2.default.newInstance({ numberOfComponents: 1, values: cellArray });
+      var cells = _DataArray2.default.newInstance({
+        numberOfComponents: 1,
+        values: cellArray
+      });
 
-      model.tris.getCABO().createVBO(cells, 'polys', _Constants4.Representation.SURFACE, { points: points, tcoords: tcoords, cellOffset: 0 });
+      model.tris.getCABO().createVBO(cells, 'polys', _Constants4.Representation.SURFACE, {
+        points: points,
+        tcoords: tcoords,
+        cellOffset: 0
+      });
       model.VBOBuildTime.modified();
       model.VBOBuildString = toString;
     }
@@ -44361,7 +45966,10 @@ var DEFAULT_VALUES = {
   openGLTexture: null,
   tris: null,
   imagemat: null,
-  colorTexture: null
+  colorTexture: null,
+  lastHaveSeenDepthRequest: false,
+  haveSeenDepthRequest: false,
+  lastTextureComponents: 0
 };
 
 // ----------------------------------------------------------------------------
@@ -44399,7 +46007,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 209 */
+/* 213 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -44420,7 +46028,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 210 */
+/* 214 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -44536,20 +46144,12 @@ function vtkOpenGLImageSlice(publicAPI, model) {
   publicAPI.getKeyMatrices = function () {
     // has the actor changed?
     if (model.renderable.getMTime() > model.keyMatrixTime.getMTime()) {
-      model.renderable.computeMatrix();
-      _glMatrix.mat4.copy(model.MCWCMatrix, model.renderable.getMatrix());
-      _glMatrix.mat4.transpose(model.MCWCMatrix, model.MCWCMatrix);
-
-      if (model.renderable.getIsIdentity()) {
-        _glMatrix.mat3.identity(model.normalMatrix);
-      } else {
-        _glMatrix.mat3.fromMat4(model.normalMatrix, model.MCWCMatrix);
-        _glMatrix.mat3.invert(model.normalMatrix, model.normalMatrix);
-      }
+      _glMatrix.mat4.copy(model.keyMatrices.mcwc, model.renderable.getMatrix());
+      _glMatrix.mat4.transpose(model.keyMatrices.mcwc, model.keyMatrices.mcwc);
       model.keyMatrixTime.modified();
     }
 
-    return { mcwc: model.MCWCMatrix, normalMatrix: model.normalMatrix };
+    return model.keyMatrices;
   };
 }
 
@@ -44560,8 +46160,7 @@ function vtkOpenGLImageSlice(publicAPI, model) {
 var DEFAULT_VALUES = {
   context: null,
   keyMatrixTime: null,
-  normalMatrix: null,
-  MCWCMatrix: null
+  keyMatrices: null
 };
 
 // ----------------------------------------------------------------------------
@@ -44575,9 +46174,10 @@ function extend(publicAPI, model) {
   _ViewNode2.default.extend(publicAPI, model, initialValues);
 
   model.keyMatrixTime = {};
-  _macro2.default.obj(model.keyMatrixTime);
-  model.normalMatrix = _glMatrix.mat3.create();
-  model.MCWCMatrix = _glMatrix.mat4.create();
+  _macro2.default.obj(model.keyMatrixTime, { mtime: 0 });
+  model.keyMatrices = {
+    mcwc: _glMatrix.mat4.create()
+  };
 
   // Build VTK API
   _macro2.default.setGet(publicAPI, model, ['context']);
@@ -44595,7 +46195,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 211 */
+/* 215 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -44630,6 +46230,7 @@ function vtkOpenGLPixelSpaceCallbackMapper(publicAPI, model) {
 
   publicAPI.opaquePass = function (prepass, renderPass) {
     model.openGLRenderer = publicAPI.getFirstAncestorOfType('vtkOpenGLRenderer');
+    model.openGLRenderWindow = model.openGLRenderer.getParent();
     var aspectRatio = model.openGLRenderer.getAspectRatio();
     var camera = model.openGLRenderer ? model.openGLRenderer.getRenderable().getActiveCamera() : null;
     var tsize = model.openGLRenderer.getTiledSizeAndOrigin();
@@ -44640,7 +46241,7 @@ function vtkOpenGLPixelSpaceCallbackMapper(publicAPI, model) {
       var width = Math.floor(zbt.getWidth());
       var height = Math.floor(zbt.getHeight());
 
-      var gl = zbt.getContext();
+      var gl = model.openGLRenderWindow.getContext();
       zbt.bind();
 
       // Here we need to use vtkFramebuffer to save current settings (bindings/buffers)
@@ -44667,7 +46268,6 @@ function vtkOpenGLPixelSpaceCallbackMapper(publicAPI, model) {
         fb.restorePreviousBindingsAndBuffers();
       }
 
-      zbt.unBind();
       gl.deleteFramebuffer(framebuffer);
     }
 
@@ -44714,7 +46314,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 212 */
+/* 216 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -44803,6 +46403,11 @@ function vtkOpenGLRenderer(publicAPI, model) {
         gl.depthMask(true);
       }
 
+      var ts = publicAPI.getTiledSizeAndOrigin();
+      gl.enable(gl.SCISSOR_TEST);
+      gl.scissor(ts.lowerLeftU, ts.lowerLeftV, ts.usize, ts.vsize);
+      gl.viewport(ts.lowerLeftU, ts.lowerLeftV, ts.usize, ts.vsize);
+
       gl.colorMask(true, true, true, true);
       gl.clear(clearMask);
 
@@ -44889,6 +46494,7 @@ function vtkOpenGLRenderer(publicAPI, model) {
     var ts = publicAPI.getTiledSizeAndOrigin();
     gl.enable(gl.SCISSOR_TEST);
     gl.scissor(ts.lowerLeftU, ts.lowerLeftV, ts.usize, ts.vsize);
+    gl.viewport(ts.lowerLeftU, ts.lowerLeftV, ts.usize, ts.vsize);
 
     gl.clear(clearMask);
 
@@ -44953,7 +46559,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 213 */
+/* 217 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -44967,13 +46573,13 @@ exports.extend = extend;
 
 var _glMatrix = __webpack_require__(3);
 
-var _Constants = __webpack_require__(25);
+var _Constants = __webpack_require__(27);
 
 var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _BufferObject = __webpack_require__(32);
+var _BufferObject = __webpack_require__(34);
 
 var _BufferObject2 = _interopRequireDefault(_BufferObject);
 
@@ -44985,15 +46591,15 @@ var _ShaderProgram = __webpack_require__(13);
 
 var _ShaderProgram2 = _interopRequireDefault(_ShaderProgram);
 
-var _PolyDataMapper = __webpack_require__(34);
+var _PolyDataMapper = __webpack_require__(36);
 
 var _PolyDataMapper2 = _interopRequireDefault(_PolyDataMapper);
 
-var _vtkSphereMapperVS = __webpack_require__(214);
+var _vtkSphereMapperVS = __webpack_require__(218);
 
 var _vtkSphereMapperVS2 = _interopRequireDefault(_vtkSphereMapperVS);
 
-var _vtkPolyDataFS = __webpack_require__(36);
+var _vtkPolyDataFS = __webpack_require__(38);
 
 var _vtkPolyDataFS2 = _interopRequireDefault(_vtkPolyDataFS);
 
@@ -45080,7 +46686,7 @@ function vtkOpenGLSphereMapper(publicAPI, model) {
     if (cellBO.getCABO().getElementCount() && (model.VBOBuildTime > cellBO.getAttributeUpdateTime().getMTime() || cellBO.getShaderSourceTime().getMTime() > cellBO.getAttributeUpdateTime().getMTime()) && cellBO.getProgram().isAttributeUsed('offsetMC')) {
       if (!cellBO.getVAO().addAttributeArray(cellBO.getProgram(), cellBO.getCABO(), 'offsetMC', 12, // 12:this->VBO->ColorOffset+sizeof(float)
       cellBO.getCABO().getStride(), model.context.FLOAT, 2, false)) {
-        vtkErrorMacro('Error setting \'offsetMC\' in shader VAO.');
+        vtkErrorMacro("Error setting 'offsetMC' in shader VAO.");
       }
     }
 
@@ -45262,13 +46868,13 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 214 */
+/* 218 */
 /***/ (function(module, exports) {
 
 module.exports = "//VTK::System::Dec\n\n/*=========================================================================\n\n  Program:   Visualization Toolkit\n  Module:    vtkSphereMapperVS.glsl\n\n  Copyright (c) Ken Martin, Will Schroeder, Bill Lorensen\n  All rights reserved.\n  See Copyright.txt or http://www.kitware.com/Copyright.htm for details.\n\n     This software is distributed WITHOUT ANY WARRANTY; without even\n     the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR\n     PURPOSE.  See the above copyright notice for more information.\n\n=========================================================================*/\n// this shader implements imposters in OpenGL for Spheres\n\nattribute vec4 vertexMC;\nattribute vec2 offsetMC;\n\n// optional normal declaration\n//VTK::Normal::Dec\n\n// Texture coordinates\n//VTK::TCoord::Dec\n\nuniform mat3 normalMatrix; // transform model coordinate directions to view coordinates\n\n// material property values\n//VTK::Color::Dec\n\n// clipping plane vars\n//VTK::Clip::Dec\n\n// camera and actor matrix values\n//VTK::Camera::Dec\n\nvarying vec4 vertexVCVSOutput;\nvarying float radiusVCVSOutput;\nvarying vec3 centerVCVSOutput;\n\nuniform int cameraParallel;\n\nvoid main()\n{\n  //VTK::Color::Impl\n\n  //VTK::Normal::Impl\n\n  //VTK::TCoord::Impl\n\n  //VTK::Clip::Impl\n\n  // compute the projected vertex position\n  vertexVCVSOutput = MCVCMatrix * vertexMC;\n  centerVCVSOutput = vertexVCVSOutput.xyz;\n  radiusVCVSOutput = length(offsetMC)*0.5;\n\n  // make the triangle face the camera\n  if (cameraParallel == 0)\n    {\n    vec3 dir = normalize(-vertexVCVSOutput.xyz);\n    vec3 base2 = normalize(cross(dir,vec3(1.0,0.0,0.0)));\n    vec3 base1 = cross(base2,dir);\n    vertexVCVSOutput.xyz = vertexVCVSOutput.xyz + offsetMC.x*base1 + offsetMC.y*base2;\n    }\n  else\n    {\n    // add in the offset\n    vertexVCVSOutput.xy = vertexVCVSOutput.xy + offsetMC;\n    }\n\n  gl_Position = VCDCMatrix * vertexVCVSOutput;\n}\n"
 
 /***/ }),
-/* 215 */
+/* 219 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -45282,21 +46888,21 @@ exports.extend = extend;
 
 var _glMatrix = __webpack_require__(3);
 
-var _Constants = __webpack_require__(25);
+var _Constants = __webpack_require__(27);
 
 var _macro = __webpack_require__(0);
 
 var macro = _interopRequireWildcard(_macro);
 
-var _BufferObject = __webpack_require__(32);
+var _BufferObject = __webpack_require__(34);
 
 var _BufferObject2 = _interopRequireDefault(_BufferObject);
 
-var _vtkStickMapperVS = __webpack_require__(216);
+var _vtkStickMapperVS = __webpack_require__(220);
 
 var _vtkStickMapperVS2 = _interopRequireDefault(_vtkStickMapperVS);
 
-var _vtkPolyDataFS = __webpack_require__(36);
+var _vtkPolyDataFS = __webpack_require__(38);
 
 var _vtkPolyDataFS2 = _interopRequireDefault(_vtkPolyDataFS);
 
@@ -45304,7 +46910,7 @@ var _ShaderProgram = __webpack_require__(13);
 
 var _ShaderProgram2 = _interopRequireDefault(_ShaderProgram);
 
-var _PolyDataMapper = __webpack_require__(34);
+var _PolyDataMapper = __webpack_require__(36);
 
 var _PolyDataMapper2 = _interopRequireDefault(_PolyDataMapper);
 
@@ -45391,7 +46997,8 @@ function vtkOpenGLStickMapper(publicAPI, model) {
     fragString = '';
     if (picking) {
       if (!selector /* ||
-                    (this->LastSelectionState >= vtkHardwareSelector::ID_LOW24) */) {
+                    (this->LastSelectionState >= vtkHardwareSelector::ID_LOW24) */
+      ) {
           VSSource = _ShaderProgram2.default.substitute(VSSource, '//VTK::Picking::Dec', ['attribute vec4 selectionId;\n', 'varying vec4 selectionIdVSOutput;']).result;
           VSSource = _ShaderProgram2.default.substitute(VSSource, '//VTK::Picking::Impl', 'selectionIdVSOutput = selectionId;').result;
           FSSource = _ShaderProgram2.default.substitute(FSSource, '//VTK::Picking::Dec', 'varying vec4 selectionIdVSOutput;').result;
@@ -45429,24 +47036,24 @@ function vtkOpenGLStickMapper(publicAPI, model) {
       if (cellBO.getProgram().isAttributeUsed('orientMC')) {
         if (!cellBO.getVAO().addAttributeArray(cellBO.getProgram(), cellBO.getCABO(), 'orientMC', 12, // after X Y Z
         cellBO.getCABO().getStride(), model.context.FLOAT, 3, false)) {
-          vtkErrorMacro('Error setting \'orientMC\' in shader VAO.');
+          vtkErrorMacro("Error setting 'orientMC' in shader VAO.");
         }
       }
       if (cellBO.getProgram().isAttributeUsed('offsetMC')) {
         if (!cellBO.getVAO().addAttributeArray(cellBO.getProgram(), cellBO.getCABO().getColorBO(), 'offsetMC', 0, cellBO.getCABO().getColorBOStride(), model.context.UNSIGNED_BYTE, 3, true)) {
-          vtkErrorMacro('Error setting \'offsetMC\' in shader VAO.');
+          vtkErrorMacro("Error setting 'offsetMC' in shader VAO.");
         }
       }
       if (cellBO.getProgram().isAttributeUsed('radiusMC')) {
         if (!cellBO.getVAO().addAttributeArray(cellBO.getProgram(), cellBO.getCABO(), 'radiusMC', 24, // X Y Z OX OY OZ
         cellBO.getCABO().getStride(), model.context.FLOAT, 1, false)) {
-          vtkErrorMacro('Error setting \'radiusMC\' in shader VAO.');
+          vtkErrorMacro("Error setting 'radiusMC' in shader VAO.");
         }
       }
       if (picking && !selector /* ||
                                (model.LastSelectionState >= vtkHardwareSelector::ID_LOW24) */ && cellBO.getProgram().isAttributeUsed('selectionId')) {
         if (!cellBO.getVAO().addAttributeArray(cellBO.getProgram(), cellBO.getCABO(), 'selectionId', cellBO.getCABO().getColorOffset(), cellBO.getCABO().getColorBOStride(), model.context.UNSIGNED_CHAR, 4, true)) {
-          vtkErrorMacro('Error setting \'selectionId\' in shader VAO.');
+          vtkErrorMacro("Error setting 'selectionId' in shader VAO.");
         }
       } else {
         cellBO.getVAO().removeAttributeArray('selectionId');
@@ -45576,6 +47183,7 @@ function vtkOpenGLStickMapper(publicAPI, model) {
     // 4: 011
     // 5: 111
 
+    // prettier-ignore
     var verticesArray = [0, 1, 3, 0, 3, 2, 2, 3, 5, 2, 5, 4];
 
     var pointIdx = 0;
@@ -45652,13 +47260,13 @@ var newInstance = exports.newInstance = macro.newInstance(extend, 'vtkOpenGLStic
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 216 */
+/* 220 */
 /***/ (function(module, exports) {
 
 module.exports = "//VTK::System::Dec\n\n/*=========================================================================\n\n  Program:   Visualization Toolkit\n  Module:    vtkStickMapperVS.glsl\n\n  Copyright (c) Ken Martin, Will Schroeder, Bill Lorensen\n  All rights reserved.\n  See Copyright.txt or http://www.kitware.com/Copyright.htm for details.\n\n     This software is distributed WITHOUT ANY WARRANTY; without even\n     the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR\n     PURPOSE.  See the above copyright notice for more information.\n\n=========================================================================*/\n// this shader implements imposters in OpenGL for Sticks\n\nattribute vec4 vertexMC;\nattribute vec3 orientMC;\nattribute vec4 offsetMC;\nattribute float radiusMC;\n\n// optional normal declaration\n//VTK::Normal::Dec\n\n//VTK::Picking::Dec\n\n// Texture coordinates\n//VTK::TCoord::Dec\n\nuniform mat3 normalMatrix; // transform model coordinate directions to view coordinates\n\n// material property values\n//VTK::Color::Dec\n\n// clipping plane vars\n//VTK::Clip::Dec\n\n// camera and actor matrix values\n//VTK::Camera::Dec\n\nvarying vec4 vertexVCVSOutput;\nvarying float radiusVCVSOutput;\nvarying float lengthVCVSOutput;\nvarying vec3 centerVCVSOutput;\nvarying vec3 orientVCVSOutput;\n\nuniform int cameraParallel;\n\nvoid main()\n{\n  //VTK::Picking::Impl\n\n  //VTK::Color::Impl\n\n  //VTK::Normal::Impl\n\n  //VTK::TCoord::Impl\n\n  //VTK::Clip::Impl\n\n  vertexVCVSOutput = MCVCMatrix * vertexMC;\n  centerVCVSOutput = vertexVCVSOutput.xyz;\n  radiusVCVSOutput = radiusMC;\n  lengthVCVSOutput = length(orientMC);\n  orientVCVSOutput = normalMatrix * normalize(orientMC);\n\n  // make sure it is pointing out of the screen\n  if (orientVCVSOutput.z < 0.0)\n    {\n    orientVCVSOutput = -orientVCVSOutput;\n    }\n\n  // make the basis\n  vec3 xbase;\n  vec3 ybase;\n  vec3 dir = vec3(0.0,0.0,1.0);\n  if (cameraParallel == 0)\n    {\n    dir = normalize(-vertexVCVSOutput.xyz);\n    }\n  if (abs(dot(dir,orientVCVSOutput)) == 1.0)\n    {\n    xbase = normalize(cross(vec3(0.0,1.0,0.0),orientVCVSOutput));\n    ybase = cross(xbase,orientVCVSOutput);\n    }\n  else\n    {\n    xbase = normalize(cross(orientVCVSOutput,dir));\n    ybase = cross(orientVCVSOutput,xbase);\n    }\n\n  vec3 offsets = offsetMC.xyz*2.0-1.0;\n  vertexVCVSOutput.xyz = vertexVCVSOutput.xyz +\n    radiusVCVSOutput*offsets.x*xbase +\n    radiusVCVSOutput*offsets.y*ybase +\n    0.5*lengthVCVSOutput*offsets.z*orientVCVSOutput;\n\n  gl_Position = VCDCMatrix * vertexVCVSOutput;\n}\n"
 
 /***/ }),
-/* 217 */
+/* 221 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -45709,6 +47317,18 @@ function vtkOpenGLVolume(publicAPI, model) {
       }
       renderPass.incrementVolumeCount();
     }
+  };
+
+  publicAPI.traverseVolumePass = function (renderPass) {
+    if (!model.renderable || !model.renderable.getVisibility()) {
+      return;
+    }
+
+    publicAPI.apply(renderPass, true);
+
+    model.children[0].traverse(renderPass);
+
+    publicAPI.apply(renderPass, false);
   };
 
   // Renders myself
@@ -45786,7 +47406,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 218 */
+/* 222 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -45804,13 +47424,13 @@ var _macro2 = _interopRequireDefault(_macro);
 
 var _glMatrix = __webpack_require__(3);
 
-var _DataArray = __webpack_require__(5);
+var _DataArray = __webpack_require__(4);
 
 var _DataArray2 = _interopRequireDefault(_DataArray);
 
 var _Constants = __webpack_require__(9);
 
-var _Helper = __webpack_require__(58);
+var _Helper = __webpack_require__(59);
 
 var _Helper2 = _interopRequireDefault(_Helper);
 
@@ -45818,11 +47438,11 @@ var _Math = __webpack_require__(1);
 
 var _Math2 = _interopRequireDefault(_Math);
 
-var _Framebuffer = __webpack_require__(56);
+var _Framebuffer = __webpack_require__(57);
 
 var _Framebuffer2 = _interopRequireDefault(_Framebuffer);
 
-var _Texture = __webpack_require__(24);
+var _Texture = __webpack_require__(26);
 
 var _Texture2 = _interopRequireDefault(_Texture);
 
@@ -45838,21 +47458,21 @@ var _ViewNode = __webpack_require__(6);
 
 var _ViewNode2 = _interopRequireDefault(_ViewNode);
 
-var _Constants2 = __webpack_require__(33);
+var _Constants2 = __webpack_require__(35);
 
-var _Constants3 = __webpack_require__(31);
+var _Constants3 = __webpack_require__(33);
 
 var _Constants4 = __webpack_require__(106);
 
-var _vtkVolumeVS = __webpack_require__(219);
+var _vtkVolumeVS = __webpack_require__(223);
 
 var _vtkVolumeVS2 = _interopRequireDefault(_vtkVolumeVS);
 
-var _vtkVolumeFS = __webpack_require__(220);
+var _vtkVolumeFS = __webpack_require__(224);
 
 var _vtkVolumeFS2 = _interopRequireDefault(_vtkVolumeFS);
 
-var _vtkVolumeFS3 = __webpack_require__(221);
+var _vtkVolumeFS3 = __webpack_require__(225);
 
 var _vtkVolumeFS4 = _interopRequireDefault(_vtkVolumeFS3);
 
@@ -46085,7 +47705,7 @@ function vtkOpenGLVolumeMapper(publicAPI, model) {
     }
 
     // has something changed that would require us to recreate the shader?
-    if (cellBO.getProgram() === 0 || needRebuild || model.lastZBufferTexture !== model.zBufferTexture || cellBO.getShaderSourceTime().getMTime() < publicAPI.getMTime() || cellBO.getShaderSourceTime().getMTime() < actor.getMTime() || cellBO.getShaderSourceTime().getMTime() < model.currentInput.getMTime()) {
+    if (cellBO.getProgram() === 0 || needRebuild || model.lastHaveSeenDepthRequest !== model.haveSeenDepthRequest || !!model.lastZBufferTexture !== !!model.zBufferTexture || cellBO.getShaderSourceTime().getMTime() < publicAPI.getMTime() || cellBO.getShaderSourceTime().getMTime() < actor.getMTime() || cellBO.getShaderSourceTime().getMTime() < model.currentInput.getMTime()) {
       model.lastZBufferTexture = model.zBufferTexture;
       return true;
     }
@@ -46539,7 +48159,7 @@ function vtkOpenGLVolumeMapper(publicAPI, model) {
         var program = model.copyShader;
 
         model.copyVAO = _VertexArrayObject2.default.newInstance();
-        model.copyVAO.setWindow(model.openGLRenderWindow);
+        model.copyVAO.setOpenGLRenderWindow(model.openGLRenderWindow);
 
         model.tris.getCABO().bind();
         if (!model.copyVAO.addAttributeArray(program, model.tris.getCABO(), 'vertexDC', model.tris.getCABO().getVertexOffset(), model.tris.getCABO().getStride(), model.context.FLOAT, 3, model.context.FALSE)) {
@@ -46731,10 +48351,19 @@ function vtkOpenGLVolumeMapper(publicAPI, model) {
       //   }
       // }
 
-      var points = _DataArray2.default.newInstance({ numberOfComponents: 3, values: ptsArray });
+      var points = _DataArray2.default.newInstance({
+        numberOfComponents: 3,
+        values: ptsArray
+      });
       points.setName('points');
-      var cells = _DataArray2.default.newInstance({ numberOfComponents: 1, values: cellArray });
-      model.tris.getCABO().createVBO(cells, 'polys', _Constants2.Representation.SURFACE, { points: points, cellOffset: 0 });
+      var cells = _DataArray2.default.newInstance({
+        numberOfComponents: 1,
+        values: cellArray
+      });
+      model.tris.getCABO().createVBO(cells, 'polys', _Constants2.Representation.SURFACE, {
+        points: points,
+        cellOffset: 0
+      });
     }
 
     model.VBOBuildTime.modified();
@@ -46815,25 +48444,25 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 219 */
+/* 223 */
 /***/ (function(module, exports) {
 
 module.exports = "//VTK::System::Dec\n\n/*=========================================================================\n\n  Program:   Visualization Toolkit\n  Module:    vtkPolyDataVS.glsl\n\n  Copyright (c) Ken Martin, Will Schroeder, Bill Lorensen\n  All rights reserved.\n  See Copyright.txt or http://www.kitware.com/Copyright.htm for details.\n\n     This software is distributed WITHOUT ANY WARRANTY; without even\n     the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR\n     PURPOSE.  See the above copyright notice for more information.\n\n=========================================================================*/\n\nattribute vec4 vertexDC;\n\nvarying vec3 vertexVCVSOutput;\nuniform mat4 DCVCMatrix;\n\nuniform float dcxmin;\nuniform float dcxmax;\nuniform float dcymin;\nuniform float dcymax;\n\nvoid main()\n{\n  // dcsmall is the device coords reduced to the\n  // x y area covered by the volume\n  vec4 dcsmall = vec4(\n    dcxmin + 0.5 * (vertexDC.x + 1.0) * (dcxmax - dcxmin),\n    dcymin + 0.5 * (vertexDC.y + 1.0) * (dcymax - dcymin),\n    vertexDC.z,\n    vertexDC.w);\n  vec4 vcpos = DCVCMatrix * dcsmall;\n  vertexVCVSOutput = vcpos.xyz/vcpos.w;\n  gl_Position = dcsmall;\n}\n"
 
 /***/ }),
-/* 220 */
+/* 224 */
 /***/ (function(module, exports) {
 
 module.exports = "//VTK::System::Dec\n\n/*=========================================================================\n\n  Program:   Visualization Toolkit\n  Module:    vtkPolyDataFS.glsl\n\n  Copyright (c) Ken Martin, Will Schroeder, Bill Lorensen\n  All rights reserved.\n  See Copyright.txt or http://www.kitware.com/Copyright.htm for details.\n\n     This software is distributed WITHOUT ANY WARRANTY; without even\n     the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR\n     PURPOSE.  See the above copyright notice for more information.\n\n=========================================================================*/\n// Template for the polydata mappers fragment shader\n\n// the output of this shader\n//VTK::Output::Dec\n\nvarying vec3 vertexVCVSOutput;\n\n// camera values\nuniform float camThick;\nuniform float camNear;\nuniform float camFar;\n\n// values describing the volume geometry\nuniform vec3 vOriginVC;\nuniform vec3 vSize;\nuniform vec3 vPlaneNormal0;\nuniform float vPlaneDistance0;\nuniform vec3 vPlaneNormal1;\nuniform float vPlaneDistance1;\nuniform vec3 vPlaneNormal2;\nuniform float vPlaneDistance2;\nuniform vec3 vPlaneNormal3;\nuniform float vPlaneDistance3;\nuniform vec3 vPlaneNormal4;\nuniform float vPlaneDistance4;\nuniform vec3 vPlaneNormal5;\nuniform float vPlaneDistance5;\n\n// opacity and color textures\nuniform sampler2D otexture;\nuniform float oshift;\nuniform float oscale;\nuniform sampler2D ctexture;\nuniform float cshift;\nuniform float cscale;\n\n// jitter texture\nuniform sampler2D jtexture;\n\n// some 3D texture values\nuniform sampler2D texture1;\nuniform float sampleDistance;\nuniform vec3 vVCToIJK;\nuniform float texWidth;\nuniform float texHeight;\nuniform int xreps;\nuniform float xstride;\nuniform float ystride;\nuniform int repWidth;\nuniform int repHeight;\nuniform int repDepth;\n\n// declaration for intermixed geometry\n//VTK::ZBuffer::Dec\n\n// Lighting values\n//VTK::Light::Dec\n\n// normal calc\n//VTK::Normal::Dec\n\n// gradient opacity\n//VTK::GradientOpacity::Dec\n\nvec2 getTextureCoord(vec3 ijk, float offset)\n{\n  // uncomment the following line to see  the  packed  texture\n  // return vec2(ijk.x/float(repWidth), ijk.y/float(repHeight));\n  int z = int(ijk.z + offset);\n  int yz = z / xreps;\n  int xz = z - yz*xreps;\n\n  float ni = (ijk.x + float(xz * repWidth))/xstride;\n  float nj = (ijk.y + float(yz * repHeight))/ystride;\n\n  vec2 tpos = vec2(ni/texWidth, nj/texHeight);\n\n  return tpos;\n}\n\n// because scalars may be encoded\n// this func will decode them as needed\nfloat getScalarValue(vec2 tpos)\n{\n  //VTK::ScalarValueFunction::Impl\n}\n\nvec2 getRayPointIntersectionBounds(\n  vec3 rayPos, vec3 rayDir,\n  vec3 planeDir, float planeDist,\n  vec2 tbounds, vec3 vPlaneX, vec3 vPlaneY,\n  float vSize1, float vSize2)\n{\n  float result = dot(rayDir, planeDir);\n  if (result == 0.0)\n  {\n    return tbounds;\n  }\n  result = -1.0 * (dot(rayPos, planeDir) + planeDist) / result;\n  vec3 xposVC = rayPos + rayDir*result;\n  vec3 vxpos = xposVC - vOriginVC;\n  vec2 vpos = vec2(\n    dot(vxpos, vPlaneX),\n    dot(vxpos, vPlaneY));\n\n  // on some apple nvidia systems this does not work\n  // if (vpos.x < 0.0 || vpos.x > vSize1 ||\n  //     vpos.y < 0.0 || vpos.y > vSize2)\n  // even just\n  // if (vpos.x < 0.0 || vpos.y < 0.0)\n  // fails\n  // so instead we compute a value that represents in and out\n  //and then compute the return using this value\n  float xcheck = max(0.0, vpos.x * (vpos.x - vSize1)); //  0 means in bounds\n  float check = sign(max(xcheck, vpos.y * (vpos.y - vSize2))); //  0 means in bounds, 1 = out\n\n  return mix(\n   vec2(min(tbounds.x, result), max(tbounds.y, result)), // in value\n   tbounds, // out value\n   check);  // 0 in 1 out\n}\n\nvoid main()\n{\n  float scalar;\n  vec4 scalarComps;\n\n  // camera is at 0,0,0 so rayDir for perspective is just the vc coord\n  vec3 rayDir = normalize(vertexVCVSOutput);\n  vec2 tbounds = vec2(100.0*camFar, -1.0);\n\n  // all this is in View Coordinates\n  tbounds = getRayPointIntersectionBounds(vertexVCVSOutput, rayDir,\n    vPlaneNormal0, vPlaneDistance0, tbounds, vPlaneNormal2, vPlaneNormal4,\n    vSize.y, vSize.z);\n  tbounds = getRayPointIntersectionBounds(vertexVCVSOutput, rayDir,\n    vPlaneNormal1, vPlaneDistance1, tbounds, vPlaneNormal2, vPlaneNormal4,\n    vSize.y, vSize.z);\n  tbounds = getRayPointIntersectionBounds(vertexVCVSOutput, rayDir,\n    vPlaneNormal2, vPlaneDistance2, tbounds, vPlaneNormal0, vPlaneNormal4,\n    vSize.x, vSize.z);\n  tbounds = getRayPointIntersectionBounds(vertexVCVSOutput, rayDir,\n    vPlaneNormal3, vPlaneDistance3, tbounds, vPlaneNormal0, vPlaneNormal4,\n    vSize.x, vSize.z);\n  tbounds = getRayPointIntersectionBounds(vertexVCVSOutput, rayDir,\n    vPlaneNormal4, vPlaneDistance4, tbounds, vPlaneNormal0, vPlaneNormal2,\n    vSize.x, vSize.y);\n  tbounds = getRayPointIntersectionBounds(vertexVCVSOutput, rayDir,\n    vPlaneNormal5, vPlaneDistance5, tbounds, vPlaneNormal0, vPlaneNormal2,\n    vSize.x, vSize.y);\n\n  // do not go behind front clipping plane\n  tbounds.x = max(0.0,tbounds.x);\n\n  // do not go PAST far clipping plane\n  float farDist = -camThick/rayDir.z;\n  tbounds.y = min(farDist,tbounds.y);\n\n  // Do not go past the zbuffer value if set\n  // This is used for intermixing opaque geometry\n  //VTK::ZBuffer::Impl\n\n  // do we need to composite?\n  if (tbounds.y > tbounds.x)\n  {\n    // compute starting and ending values in volume space\n    vec3 startVC = vertexVCVSOutput + tbounds.x*rayDir;\n    startVC = startVC - vOriginVC;\n\n    // vpos and endvpos are in VolumeCoords not Index yet\n    vec3 vpos = vec3(\n      dot(startVC, vPlaneNormal0),\n      dot(startVC, vPlaneNormal2),\n      dot(startVC, vPlaneNormal4));\n    vec3 endVC = vertexVCVSOutput + tbounds.y*rayDir;\n    endVC = endVC - vOriginVC;\n    vec3 endvpos = vec3(\n      dot(endVC, vPlaneNormal0),\n      dot(endVC, vPlaneNormal2),\n      dot(endVC, vPlaneNormal4));\n    vec3 vdelta = endvpos - vpos;\n    float numSteps = length(vdelta) / sampleDistance;\n    vdelta = vdelta / numSteps;\n\n    // start slightly inside and apply some jitter\n    float jitter = texture2D(jtexture, gl_FragCoord.xy/32.0).r;\n    vpos = vpos + vdelta*(0.01 + 0.98*jitter);\n    vec4 color = vec4(0.0, 0.0, 0.0, 0.0);\n    int count = int(numSteps - 0.2); // end slightly inside\n\n    vec3 ijk = vpos * vVCToIJK;\n    vdelta = vdelta * vVCToIJK;\n    for (int i = 0; i < //VTK::MaximumSamplesValue ; ++i)\n    {\n      // compute the 2d texture coordinate/s\n      //VTK::ComputeTCoords\n\n      // compute the scalar\n      //VTK::ScalarFunction\n\n      // now map through opacity and color\n      vec4 tcolor = texture2D(ctexture, vec2(scalar * cscale + cshift, 0.5));\n      tcolor.a = texture2D(otexture, vec2(scalar * oscale + oshift, 0.5)).r;\n\n      // compute the normal if needed\n      //VTK::Normal::Impl\n\n      // handle gradient opacity\n      //VTK::GradientOpacity::Impl\n\n      // handle lighting\n      //VTK::Light::Impl\n\n      float mix = (1.0 - color.a);\n\n      // this line should not be needed but nvidia seems to not handle\n      // the break correctly on windows/chrome 58 angle\n      mix = mix * sign(max(float(count - i + 1), 0.0));\n\n      color = color + vec4(tcolor.rgb*tcolor.a, tcolor.a)*mix;\n      if (i >= count) { break; }\n      if (color.a > 0.99) { color.a = 1.0; break; }\n      ijk += vdelta;\n    }\n\n    gl_FragData[0] = vec4(color.rgb/color.a, color.a);\n    // gl_FragData[0] = vec4(tbounds.y/farDist, tbounds.x/farDist, color.b/color.a, 1.0);\n  }\n  else\n  {\n    discard;\n  }\n}\n"
 
 /***/ }),
-/* 221 */
+/* 225 */
 /***/ (function(module, exports) {
 
 module.exports = "//VTK::System::Dec\n\n/*=========================================================================\n\n  Program:   Visualization Toolkit\n  Module:    vtkPolyDataFS.glsl\n\n  Copyright (c) Ken Martin, Will Schroeder, Bill Lorensen\n  All rights reserved.\n  See Copyright.txt or http://www.kitware.com/Copyright.htm for details.\n\n     This software is distributed WITHOUT ANY WARRANTY; without even\n     the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR\n     PURPOSE.  See the above copyright notice for more information.\n\n=========================================================================*/\n// Template for the polydata mappers fragment shader\n\n// the output of this shader\n//VTK::Output::Dec\n\nvarying vec3 vertexVCVSOutput;\n\n// camera values\nuniform float camThick;\nuniform float camNear;\nuniform float camFar;\n\n// values describing the volume geometry\nuniform vec3 vOriginVC;\nuniform vec3 vSize;\nuniform vec3 vPlaneNormal0;\nuniform float vPlaneDistance0;\nuniform vec3 vPlaneNormal1;\nuniform float vPlaneDistance1;\nuniform vec3 vPlaneNormal2;\nuniform float vPlaneDistance2;\nuniform vec3 vPlaneNormal3;\nuniform float vPlaneDistance3;\nuniform vec3 vPlaneNormal4;\nuniform float vPlaneDistance4;\nuniform vec3 vPlaneNormal5;\nuniform float vPlaneDistance5;\n\n// opacity and color textures\nuniform sampler2D otexture;\nuniform float oshift;\nuniform float oscale;\nuniform sampler2D ctexture;\nuniform float cshift;\nuniform float cscale;\n\n// jitter texture\nuniform sampler2D jtexture;\n\n// some 3D texture values\nuniform highp sampler3D texture1;\nuniform float sampleDistance;\nuniform vec3 vVCToIJK;\n\n// declaration for intermixed geometry\n//VTK::ZBuffer::Dec\n\n// Lighting values\n//VTK::Light::Dec\n\n// normal calc\n//VTK::Normal::Dec\n\n// gradient opacity\n//VTK::GradientOpacity::Dec\n\nvec2 getRayPointIntersectionBounds(\n  vec3 rayPos, vec3 rayDir,\n  vec3 planeDir, float planeDist,\n  vec2 tbounds, vec3 vPlaneX, vec3 vPlaneY,\n  float vSize1, float vSize2)\n{\n  float result = dot(rayDir, planeDir);\n  if (result == 0.0)\n  {\n    return tbounds;\n  }\n  result = -1.0 * (dot(rayPos, planeDir) + planeDist) / result;\n  vec3 xposVC = rayPos + rayDir*result;\n  vec3 vxpos = xposVC - vOriginVC;\n  vec2 vpos = vec2(\n    dot(vxpos, vPlaneX),\n    dot(vxpos, vPlaneY));\n\n  // on some apple nvidia systems this does not work\n  // if (vpos.x < 0.0 || vpos.x > vSize1 ||\n  //     vpos.y < 0.0 || vpos.y > vSize2)\n  // even just\n  // if (vpos.x < 0.0 || vpos.y < 0.0)\n  // fails\n  // so instead we compute a value that represents in and out\n  //and then compute the return using this value\n  float xcheck = max(0.0, vpos.x * (vpos.x - vSize1)); //  0 means in bounds\n  float check = sign(max(xcheck, vpos.y * (vpos.y - vSize2))); //  0 means in bounds, 1 = out\n\n  return mix(\n   vec2(min(tbounds.x, result), max(tbounds.y, result)), // in value\n   tbounds, // out value\n   check);  // 0 in 1 out\n}\n\nvoid main()\n{\n  float scalar;\n  vec4 scalarComps;\n\n  // camera is at 0,0,0 so rayDir for perspective is just the vc coord\n  vec3 rayDir = normalize(vertexVCVSOutput);\n  vec2 tbounds = vec2(100.0*camFar, -1.0);\n\n  // all this is in View Coordinates\n  tbounds = getRayPointIntersectionBounds(vertexVCVSOutput, rayDir,\n    vPlaneNormal0, vPlaneDistance0, tbounds, vPlaneNormal2, vPlaneNormal4,\n    vSize.y, vSize.z);\n  tbounds = getRayPointIntersectionBounds(vertexVCVSOutput, rayDir,\n    vPlaneNormal1, vPlaneDistance1, tbounds, vPlaneNormal2, vPlaneNormal4,\n    vSize.y, vSize.z);\n  tbounds = getRayPointIntersectionBounds(vertexVCVSOutput, rayDir,\n    vPlaneNormal2, vPlaneDistance2, tbounds, vPlaneNormal0, vPlaneNormal4,\n    vSize.x, vSize.z);\n  tbounds = getRayPointIntersectionBounds(vertexVCVSOutput, rayDir,\n    vPlaneNormal3, vPlaneDistance3, tbounds, vPlaneNormal0, vPlaneNormal4,\n    vSize.x, vSize.z);\n  tbounds = getRayPointIntersectionBounds(vertexVCVSOutput, rayDir,\n    vPlaneNormal4, vPlaneDistance4, tbounds, vPlaneNormal0, vPlaneNormal2,\n    vSize.x, vSize.y);\n  tbounds = getRayPointIntersectionBounds(vertexVCVSOutput, rayDir,\n    vPlaneNormal5, vPlaneDistance5, tbounds, vPlaneNormal0, vPlaneNormal2,\n    vSize.x, vSize.y);\n\n  // do not go behind front clipping plane\n  tbounds.x = max(0.0,tbounds.x);\n\n  // do not go PAST far clipping plane\n  float farDist = -camThick/rayDir.z;\n  tbounds.y = min(farDist,tbounds.y);\n\n  // Do not go past the zbuffer value if set\n  // This is used for intermixing opaque geometry\n  //VTK::ZBuffer::Impl\n\n  // do we need to composite?\n  if (tbounds.y > tbounds.x)\n  {\n    // compute starting and ending values in volume space\n    vec3 startVC = vertexVCVSOutput + tbounds.x*rayDir;\n    startVC = startVC - vOriginVC;\n\n    // vpos and endvpos are in VolumeCoords not Index yet\n    vec3 vpos = vec3(\n      dot(startVC, vPlaneNormal0),\n      dot(startVC, vPlaneNormal2),\n      dot(startVC, vPlaneNormal4));\n    vec3 endVC = vertexVCVSOutput + tbounds.y*rayDir;\n    endVC = endVC - vOriginVC;\n    vec3 endvpos = vec3(\n      dot(endVC, vPlaneNormal0),\n      dot(endVC, vPlaneNormal2),\n      dot(endVC, vPlaneNormal4));\n    vec3 vdelta = endvpos - vpos;\n    float numSteps = length(vdelta) / sampleDistance;\n    vdelta = vdelta / numSteps;\n\n    // start slightly inside and apply some jitter\n    float jitter = texture2D(jtexture, gl_FragCoord.xy/32.0).r;\n    vpos = vpos + vdelta*(0.01 + 0.98*jitter);\n    vec4 color = vec4(0.0, 0.0, 0.0, 0.0);\n\n    vec3 ijk = vpos * vVCToIJK;\n    vdelta = vdelta * vVCToIJK;\n    float i = 0.0;\n    while (i < numSteps - 0.2)\n    {\n      // compute the scalar\n      scalar = texture(texture1, ijk).r;\n\n      // now map through opacity and color\n      vec4 tcolor = texture2D(ctexture, vec2(scalar * cscale + cshift, 0.5));\n      tcolor.a = texture2D(otexture, vec2(scalar * oscale + oshift, 0.5)).r;\n\n      // compute the normal if needed\n      //VTK::Normal::Impl\n\n      // handle gradient opacity\n      //VTK::GradientOpacity::Impl\n\n      // handle lighting\n      //VTK::Light::Impl\n\n      float mix = (1.0 - color.a);\n\n      color = color + vec4(tcolor.rgb*tcolor.a, tcolor.a)*mix;\n      if (color.a > 0.99) { color.a = 1.0; break; }\n      ijk += vdelta;\n      i += 1.0;\n    }\n\n    gl_FragData[0] = vec4(color.rgb/color.a, color.a);\n    // gl_FragData[0] = vec4(tbounds.y/farDist, tbounds.x/farDist, color.b/color.a, 1.0);\n  }\n  else\n  {\n    discard;\n  }\n}\n"
 
 /***/ }),
-/* 222 */
+/* 226 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -46845,7 +48474,7 @@ Object.defineProperty(exports, "__esModule", {
 exports.newInstance = undefined;
 exports.extend = extend;
 
-var _blueimpMd = __webpack_require__(223);
+var _blueimpMd = __webpack_require__(227);
 
 var _blueimpMd2 = _interopRequireDefault(_blueimpMd);
 
@@ -47047,7 +48676,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 223 */
+/* 227 */
 /***/ (function(module, exports, __webpack_require__) {
 
 var __WEBPACK_AMD_DEFINE_RESULT__;/*
@@ -47334,7 +48963,7 @@ var __WEBPACK_AMD_DEFINE_RESULT__;/*
 
 
 /***/ }),
-/* 224 */
+/* 228 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -47476,7 +49105,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 225 */
+/* 229 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -47494,11 +49123,11 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _Camera = __webpack_require__(226);
+var _Camera = __webpack_require__(230);
 
 var _Camera2 = _interopRequireDefault(_Camera);
 
-var _Light = __webpack_require__(227);
+var _Light = __webpack_require__(231);
 
 var _Light2 = _interopRequireDefault(_Light);
 
@@ -47506,11 +49135,13 @@ var _Math = __webpack_require__(1);
 
 var _Math2 = _interopRequireDefault(_Math);
 
-var _Viewport = __webpack_require__(228);
+var _Viewport = __webpack_require__(232);
 
 var _Viewport2 = _interopRequireDefault(_Viewport);
 
-var _BoundingBox = __webpack_require__(59);
+var _BoundingBox = __webpack_require__(60);
+
+var _BoundingBox2 = _interopRequireDefault(_BoundingBox);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -47558,10 +49189,6 @@ function vtkRenderer(publicAPI, model) {
       vtkDebugMacro('No cameras are on, creating one.');
       // the get method will automagically create a camera
       // and reset it since one hasn't been specified yet.
-      // If is very unlikely that this can occur - if this
-      // renderer is part of a vtkRenderWindow, the camera
-      // will already have been created as part of the
-      // DoStereoRender() method.
       publicAPI.getActiveCameraAndResetIfCreated();
     }
 
@@ -47576,7 +49203,6 @@ function vtkRenderer(publicAPI, model) {
     // this lights.  That allows one renderer to view the lights that
     // another renderer is setting up.
     var camera = publicAPI.getActiveCameraAndResetIfCreated();
-    var lightMatrix = camera.getCameraLightTransformMatrix();
 
     model.lights.forEach(function (light) {
       if (light.lightTypeIsSceneLight()) {
@@ -47589,7 +49215,7 @@ function vtkRenderer(publicAPI, model) {
         light.setFocalPointFrom(camera.getFocalPointByReference());
         light.modified(camera.getMTime());
       } else if (light.lightTypeIsCameraLight()) {
-        light.setTransformMatrix(lightMatrix);
+        vtkErrorMacro('camera lights not supported yet', light);
       } else {
         vtkErrorMacro('light has unknown light type', light);
       }
@@ -47761,7 +49387,7 @@ function vtkRenderer(publicAPI, model) {
     }
 
     // get the perspective transformation from the active camera
-    var matrix = model.activeCamera.getCompositeProjectionTransformMatrix(aspect, -1.0, 1.0);
+    var matrix = model.activeCamera.getCompositeProjectionMatrix(aspect, -1.0, 1.0);
 
     _glMatrix.mat4.invert(matrix, matrix);
     _glMatrix.mat4.transpose(matrix, matrix);
@@ -47781,7 +49407,7 @@ function vtkRenderer(publicAPI, model) {
     }
 
     // get the perspective transformation from the active camera
-    var matrix = model.activeCamera.getCompositeProjectionTransformMatrix(aspect, -1.0, 1.0);
+    var matrix = model.activeCamera.getCompositeProjectionMatrix(aspect, -1.0, 1.0);
     _glMatrix.mat4.transpose(matrix, matrix);
 
     var result = _glMatrix.vec3.fromValues(x, y, z);
@@ -47790,12 +49416,12 @@ function vtkRenderer(publicAPI, model) {
   };
 
   publicAPI.computeVisiblePropBounds = function () {
-    model.allBounds[0] = _BoundingBox.INIT_BOUNDS[0];
-    model.allBounds[1] = _BoundingBox.INIT_BOUNDS[1];
-    model.allBounds[2] = _BoundingBox.INIT_BOUNDS[2];
-    model.allBounds[3] = _BoundingBox.INIT_BOUNDS[3];
-    model.allBounds[4] = _BoundingBox.INIT_BOUNDS[4];
-    model.allBounds[5] = _BoundingBox.INIT_BOUNDS[5];
+    model.allBounds[0] = _BoundingBox2.default.INIT_BOUNDS[0];
+    model.allBounds[1] = _BoundingBox2.default.INIT_BOUNDS[1];
+    model.allBounds[2] = _BoundingBox2.default.INIT_BOUNDS[2];
+    model.allBounds[3] = _BoundingBox2.default.INIT_BOUNDS[3];
+    model.allBounds[4] = _BoundingBox2.default.INIT_BOUNDS[4];
+    model.allBounds[5] = _BoundingBox2.default.INIT_BOUNDS[5];
     var nothingVisible = true;
 
     publicAPI.invokeEvent(COMPUTE_VISIBLE_PROP_BOUNDS_EVENT);
@@ -47832,7 +49458,7 @@ function vtkRenderer(publicAPI, model) {
 
     if (nothingVisible) {
       _Math2.default.uninitializeBounds(model.allBounds);
-      vtkDebugMacro('Can\'t compute bounds, no 3D props are visible');
+      vtkDebugMacro("Can't compute bounds, no 3D props are visible");
     }
 
     return model.allBounds;
@@ -47913,6 +49539,10 @@ function vtkRenderer(publicAPI, model) {
     // setup default parallel scale
     model.activeCamera.setParallelScale(parallelScale);
 
+    // update reasonable world to physical values
+    model.activeCamera.setPhysicalScale(1.0 / radius);
+    model.activeCamera.setPhysicalTranslation(-center[0], -center[1], -center[2]);
+
     // Here to let parallel/distributed compositing intercept
     // and do the right thing.
     publicAPI.invokeEvent(RESET_CAMERA_EVENT);
@@ -47937,7 +49567,8 @@ function vtkRenderer(publicAPI, model) {
       return false;
     }
 
-    var vn = null;var position = null;
+    var vn = null;
+    var position = null;
     vn = model.activeCamera.getViewPlaneNormalByReference();
     position = model.activeCamera.getPositionByReference();
 
@@ -48146,7 +49777,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 226 */
+/* 230 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -48195,9 +49826,16 @@ function vtkCamera(publicAPI, model) {
   // Set up private variables and methods
   var viewMatrix = _glMatrix.mat4.create();
   var projectionMatrix = _glMatrix.mat4.create();
+  var w2pMatrix = _glMatrix.mat4.create();
+  var origin = _glMatrix.vec3.create();
+  var dopbasis = _glMatrix.vec3.fromValues(0.0, 0.0, -1.0);
+  var upbasis = _glMatrix.vec3.fromValues(0.0, 1.0, 0.0);
+  var tmpvec1 = _glMatrix.vec3.create();
+  var tmpvec2 = _glMatrix.vec3.create();
+  var tmpvec3 = _glMatrix.vec3.create();
 
   publicAPI.orthogonalizeViewUp = function () {
-    var vt = publicAPI.getViewTransformMatrix();
+    var vt = publicAPI.getViewMatrix();
     model.viewUp[0] = vt[4];
     model.viewUp[1] = vt[5];
     model.viewUp[2] = vt[6];
@@ -48216,7 +49854,6 @@ function vtkCamera(publicAPI, model) {
 
     // recompute the focal distance
     publicAPI.computeDistance();
-    // publicAPI.computeCameraLightTransform();
 
     publicAPI.modified();
   };
@@ -48232,7 +49869,6 @@ function vtkCamera(publicAPI, model) {
 
     // recompute the focal distance
     publicAPI.computeDistance();
-    // publicAPI.computeCameraLightTransform();
 
     publicAPI.modified();
   };
@@ -48375,7 +50011,7 @@ function vtkCamera(publicAPI, model) {
     var newPosition = _glMatrix.vec3.create();
     var fp = model.focalPoint;
 
-    var vt = publicAPI.getViewTransformMatrix();
+    var vt = publicAPI.getViewMatrix();
     var axis = [-vt[0], -vt[1], -vt[2]];
 
     var trans = _glMatrix.mat4.create();
@@ -48397,7 +50033,7 @@ function vtkCamera(publicAPI, model) {
     var newFocalPoint = _glMatrix.vec3.create();
     var position = model.position;
 
-    var vt = publicAPI.getViewTransformMatrix();
+    var vt = publicAPI.getViewMatrix();
     var axis = [vt[0], vt[1], vt[2]];
 
     var trans = _glMatrix.mat4.create();
@@ -48431,7 +50067,83 @@ function vtkCamera(publicAPI, model) {
 
   publicAPI.setObliqueAngles = function (alpha, beta) {};
 
-  publicAPI.getViewTransformMatrix = function () {
+  publicAPI.physicalOrientationToWorldDirection = function (ori) {
+    // get the PhysicalToWorldMatrix
+    publicAPI.getPhysicalToWorldMatrix(w2pMatrix);
+
+    // push the x axis through the orientation quat
+    var oriq = _glMatrix.quat.fromValues(ori[0], ori[1], ori[2], ori[3]);
+    var coriq = _glMatrix.quat.create();
+    var qdir = _glMatrix.quat.fromValues(0.0, 0.0, 1.0, 0.0);
+    _glMatrix.quat.conjugate(coriq, oriq);
+
+    // rotate the z axis by the quat
+    _glMatrix.quat.multiply(qdir, oriq, qdir);
+    _glMatrix.quat.multiply(qdir, qdir, coriq);
+
+    // return the z axis in world coords
+    return [qdir[0], qdir[1], qdir[2]];
+  };
+
+  publicAPI.getPhysicalToWorldMatrix = function (result) {
+    publicAPI.getWorldToPhysicalMatrix(result);
+    _glMatrix.mat4.invert(result, result);
+  };
+
+  publicAPI.getWorldToPhysicalMatrix = function (result) {
+    _glMatrix.mat4.identity(w2pMatrix);
+    _glMatrix.vec3.set(tmpvec1, model.physicalScale, model.physicalScale, model.physicalScale);
+    _glMatrix.mat4.scale(w2pMatrix, w2pMatrix, tmpvec1);
+    _glMatrix.mat4.translate(w2pMatrix, w2pMatrix, model.physicalTranslation);
+
+    // now the physical to vtk world rotation tform
+    var physVRight = [3];
+    _Math2.default.cross(model.physicalViewNorth, model.physicalViewUp, physVRight);
+    var phystoworld = _glMatrix.mat4.create();
+    phystoworld[0] = physVRight[0];
+    phystoworld[1] = physVRight[1];
+    phystoworld[2] = physVRight[2];
+    phystoworld[4] = model.physicalViewUp[0];
+    phystoworld[5] = model.physicalViewUp[1];
+    phystoworld[6] = model.physicalViewUp[2];
+    phystoworld[8] = -model.physicalViewNorth[0];
+    phystoworld[9] = -model.physicalViewNorth[1];
+    phystoworld[10] = -model.physicalViewNorth[2];
+    _glMatrix.mat4.transpose(phystoworld, phystoworld);
+    _glMatrix.mat4.multiply(result, w2pMatrix, phystoworld);
+  };
+
+  // the provided matrix should include
+  // translation and orientation only
+  publicAPI.computeViewParametersFromPhysicalMatrix = function (mat) {
+    // get the WorldToPhysicalMatrix
+    publicAPI.getWorldToPhysicalMatrix(w2pMatrix);
+
+    // first convert the physical -> hmd matrix to be world -> hmd
+    _glMatrix.mat4.multiply(viewMatrix, mat, w2pMatrix);
+    // invert to get hmd -> world
+    _glMatrix.mat4.invert(viewMatrix, viewMatrix);
+
+    // then extract the params position, orientation
+    // push 0,0,0 through to get a translation
+    _glMatrix.vec3.transformMat4(tmpvec1, origin, viewMatrix);
+    publicAPI.computeDistance();
+    var oldDist = model.distance;
+    publicAPI.setPosition(tmpvec1[0], tmpvec1[1], tmpvec1[2]);
+
+    // push basis vectors to get orientation
+    _glMatrix.vec3.transformMat4(tmpvec2, dopbasis, viewMatrix);
+    _glMatrix.vec3.subtract(tmpvec2, tmpvec2, tmpvec1);
+    _glMatrix.vec3.normalize(tmpvec2, tmpvec2);
+    publicAPI.setDirectionOfProjection(tmpvec2[0], tmpvec2[1], tmpvec2[2]);
+    _glMatrix.vec3.transformMat4(tmpvec3, upbasis, viewMatrix);
+    _glMatrix.vec3.subtract(tmpvec3, tmpvec3, tmpvec1);
+    publicAPI.setViewUp(tmpvec3[0], tmpvec3[1], tmpvec3[2]);
+
+    publicAPI.setDistance(oldDist);
+  };
+
+  publicAPI.getViewMatrix = function () {
     var eye = model.position;
     var at = model.focalPoint;
     var up = model.viewUp;
@@ -48442,11 +50154,27 @@ function vtkCamera(publicAPI, model) {
     _glMatrix.vec3.fromValues(up[0], up[1], up[2])); // up
 
     _glMatrix.mat4.transpose(viewMatrix, viewMatrix);
+
     _glMatrix.mat4.copy(result, viewMatrix);
     return result;
   };
 
-  publicAPI.getProjectionTransformMatrix = function (aspect, nearz, farz) {
+  publicAPI.setProjectionMatrix = function (mat) {
+    model.projectionMatrix = mat;
+  };
+
+  publicAPI.getProjectionMatrix = function (aspect, nearz, farz) {
+    var result = _glMatrix.mat4.create();
+
+    if (model.projectionMatrix) {
+      _glMatrix.vec3.set(tmpvec1, model.physicalScale, model.physicalScale, model.physicalScale);
+
+      _glMatrix.mat4.copy(result, model.projectionMatrix);
+      _glMatrix.mat4.scale(result, result, tmpvec1);
+      _glMatrix.mat4.transpose(result, result);
+      return result;
+    }
+
     _glMatrix.mat4.identity(projectionMatrix);
 
     // FIXME: Not sure what to do about adjust z buffer here
@@ -48498,23 +50226,18 @@ function vtkCamera(publicAPI, model) {
       projectionMatrix[15] = 0.0;
     }
 
-    var result = _glMatrix.mat4.create();
     _glMatrix.mat4.copy(result, projectionMatrix);
 
     return result;
   };
 
-  publicAPI.getCompositeProjectionTransformMatrix = function (aspect, nearz, farz) {
-    var vMat = publicAPI.getViewTransformMatrix();
-    var pMat = publicAPI.getProjectionTransformMatrix(aspect, nearz, farz);
+  publicAPI.getCompositeProjectionMatrix = function (aspect, nearz, farz) {
+    var vMat = publicAPI.getViewMatrix();
+    var pMat = publicAPI.getProjectionMatrix(aspect, nearz, farz);
     var result = _glMatrix.mat4.create();
     _glMatrix.mat4.multiply(result, vMat, pMat);
     return result;
   };
-
-  // publicAPI.getProjectionTransformMatrix = renderer => {
-  //   // return glmatrix object
-  // };
 
   publicAPI.getFrustumPlanes = function (aspect) {
     // Return array of 24 params (4 params for each of 6 plane equations)
@@ -48606,18 +50329,6 @@ function vtkCamera(publicAPI, model) {
     publicAPI.setViewUp(newvup[0], newvup[1], newvup[2]);
     publicAPI.modified();
   };
-
-  publicAPI.getCameraLightTransformMatrix = function () {};
-
-  publicAPI.updateViewport = function () {};
-
-  publicAPI.shallowCopy = function (sourceCamera) {};
-
-  publicAPI.setScissorRect = function (rect) {
-    // rect is a vtkRect
-  };
-
-  publicAPI.getScissorRect = function () {};
 }
 
 // ----------------------------------------------------------------------------
@@ -48637,17 +50348,19 @@ var DEFAULT_VALUES = exports.DEFAULT_VALUES = {
   thickness: 1000,
   windowCenter: [0, 0],
   viewPlaneNormal: [0, 0, 1],
-  focalDisk: 1,
   useOffAxisProjection: false,
   screenBottomLeft: [-0.5, -0.5, -0.5],
   screenBottomRight: [0.5, -0.5, -0.5],
   screenTopRight: [0.5, 0.5, -0.5],
-  userViewTransform: null,
-  userTransform: null,
   freezeFocalPoint: false,
   useScissor: false,
-  physicalViewUp: [0.0, 1.0, 0.0],
-  physicalViewNorth: [0.0, 0.0, -1.0]
+  projectionMatrix: null,
+
+  // used for world to physical transformations
+  physicalTranslation: [0, 0, 0],
+  physicalScale: 1.0,
+  physicalViewUp: [0, 1, 0],
+  physicalViewNorth: [0, 0, -1]
 };
 
 // ----------------------------------------------------------------------------
@@ -48660,15 +50373,15 @@ function extend(publicAPI, model) {
   // Build VTK API
   _macro2.default.obj(publicAPI, model);
 
-  _macro2.default.get(publicAPI, model, ['distance', 'thickness', 'userViewTransform', 'userTransform']);
+  model.viewMatrix = _macro2.default.get(publicAPI, model, ['distance', 'thickness']);
 
-  _macro2.default.setGet(publicAPI, model, ['parallelProjection', 'useHorizontalViewAngle', 'viewAngle', 'parallelScale', 'focalDisk', 'useOffAxisProjection', 'freezeFocalPoint', 'useScissor']);
+  _macro2.default.setGet(publicAPI, model, ['parallelProjection', 'useHorizontalViewAngle', 'viewAngle', 'parallelScale', 'useOffAxisProjection', 'freezeFocalPoint', 'useScissor', 'physicalScale']);
 
   _macro2.default.getArray(publicAPI, model, ['directionOfProjection', 'viewPlaneNormal', 'position', 'focalPoint']);
 
   _macro2.default.setGetArray(publicAPI, model, ['clippingRange', 'windowCenter'], 2);
 
-  _macro2.default.setGetArray(publicAPI, model, ['viewUp', 'screenBottomLeft', 'screenBottomRight', 'screenTopRight', 'physicalViewUp', 'physicalViewNorth'], 3);
+  _macro2.default.setGetArray(publicAPI, model, ['viewUp', 'screenBottomLeft', 'screenBottomRight', 'screenTopRight', 'physicalTranslation', 'physicalViewUp', 'physicalViewNorth'], 3);
 
   // Object methods
   vtkCamera(publicAPI, model);
@@ -48683,7 +50396,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 227 */
+/* 231 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -48824,7 +50537,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend, LIGHT_TYPES: LIGHT_TYPES };
 
 /***/ }),
-/* 228 */
+/* 232 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -49003,7 +50716,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 229 */
+/* 233 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -49166,7 +50879,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 230 */
+/* 234 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -49190,8 +50903,14 @@ var _InteractorStyleTrackballCamera = __webpack_require__(108);
 
 var _InteractorStyleTrackballCamera2 = _interopRequireDefault(_InteractorStyleTrackballCamera);
 
+var _Constants = __webpack_require__(109);
+
+var _Constants2 = _interopRequireDefault(_Constants);
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
+var Device = _Constants2.default.Device,
+    Input = _Constants2.default.Input;
 var vtkWarningMacro = _macro2.default.vtkWarningMacro,
     vtkErrorMacro = _macro2.default.vtkErrorMacro;
 
@@ -49199,7 +50918,11 @@ var vtkWarningMacro = _macro2.default.vtkWarningMacro,
 // Global methods
 // ----------------------------------------------------------------------------
 
-var eventsWeHandle = ['Animation', 'Enter', 'Leave', 'MouseMove', 'LeftButtonPress', 'LeftButtonRelease', 'MiddleButtonPress', 'MiddleButtonRelease', 'RightButtonPress', 'RightButtonRelease', 'MouseWheelForward', 'MouseWheelBackward', 'Expose', 'Configure', 'Timer', 'KeyPress', 'KeyUp', 'Char', 'Delete', 'StartPinch', 'Pinch', 'EndPinch', 'StartPan', 'Pan', 'EndPan', 'StartRotate', 'Rotate', 'EndRotate', 'Tap', 'LongTap', 'Swipe'];
+var deviceInputMap = {
+  'OpenVR Gamepad': [Input.TrackPad, Input.Trigger, Input.Grip, Input.ApplicationMenu]
+};
+
+var handledEvents = ['Animation', 'Enter', 'Leave', 'MouseMove', 'LeftButtonPress', 'LeftButtonRelease', 'MiddleButtonPress', 'MiddleButtonRelease', 'RightButtonPress', 'RightButtonRelease', 'MouseWheelForward', 'MouseWheelBackward', 'Expose', 'Configure', 'Timer', 'KeyPress', 'KeyUp', 'Char', 'Delete', 'StartPinch', 'Pinch', 'EndPinch', 'StartPan', 'Pan', 'EndPan', 'StartRotate', 'Rotate', 'EndRotate', 'Tap', 'LongTap', 'Swipe', 'Button3D', 'Move3D'];
 
 function preventDefault(event) {
   event.stopPropagation();
@@ -49303,39 +51026,48 @@ function vtkRenderWindowInteractor(publicAPI, model) {
     return model.lastAnimationEventPositions.get(pointer);
   };
 
+  function interactionRegistration(addListeners) {
+    var rootElm = document.querySelector('body');
+    var method = addListeners ? 'addEventListener' : 'removeEventListener';
+    var invMethod = addListeners ? 'removeEventListener' : 'addEventListener';
+
+    if (model.canvas) {
+      model.canvas[invMethod]('mousemove', publicAPI.handleMouseMove);
+    }
+
+    rootElm[method]('mouseup', publicAPI.handleMouseUp);
+    rootElm[method]('mousemove', publicAPI.handleMouseMove);
+    rootElm[method]('touchend', publicAPI.handleTouchEnd, false);
+    rootElm[method]('touchcancel', publicAPI.handleTouchEnd, false);
+    rootElm[method]('touchmove', publicAPI.handleTouchMove, false);
+  }
+
   publicAPI.bindEvents = function (canvas) {
     model.canvas = canvas;
     canvas.addEventListener('contextmenu', preventDefault);
     canvas.addEventListener('click', preventDefault);
     canvas.addEventListener('mousewheel', publicAPI.handleWheel);
     canvas.addEventListener('DOMMouseScroll', publicAPI.handleWheel);
-
+    canvas.addEventListener('mousemove', publicAPI.handleMouseMove);
     canvas.addEventListener('mousedown', publicAPI.handleMouseDown);
     document.querySelector('body').addEventListener('keypress', publicAPI.handleKeyPress);
     document.querySelector('body').addEventListener('keyup', publicAPI.handleKeyUp);
-    canvas.addEventListener('mouseup', publicAPI.handleMouseUp);
-    canvas.addEventListener('mousemove', publicAPI.handleMouseMove);
+
     canvas.addEventListener('touchstart', publicAPI.handleTouchStart, false);
-    canvas.addEventListener('touchend', publicAPI.handleTouchEnd, false);
-    canvas.addEventListener('touchcancel', publicAPI.handleTouchEnd, false);
-    canvas.addEventListener('touchmove', publicAPI.handleTouchMove, false);
   };
 
-  publicAPI.unbindEvents = function (canvas) {
-    canvas.removeEventListener('contextmenu', preventDefault);
-    canvas.removeEventListener('click', preventDefault);
-    canvas.removeEventListener('mousewheel', publicAPI.handleWheel);
-    canvas.removeEventListener('DOMMouseScroll', publicAPI.handleWheel);
-
-    canvas.removeEventListener('mousedown', publicAPI.handleMouseDown);
+  publicAPI.unbindEvents = function () {
+    interactionRegistration(false);
+    model.canvas.removeEventListener('contextmenu', preventDefault);
+    model.canvas.removeEventListener('click', preventDefault);
+    model.canvas.removeEventListener('mousewheel', publicAPI.handleWheel);
+    model.canvas.removeEventListener('DOMMouseScroll', publicAPI.handleWheel);
+    model.canvas.removeEventListener('mousemove', publicAPI.handleMouseMove);
+    model.canvas.removeEventListener('mousedown', publicAPI.handleMouseDown);
     document.querySelector('body').removeEventListener('keypress', publicAPI.handleKeyPress);
     document.querySelector('body').removeEventListener('keyup', publicAPI.handleKeyUp);
-    canvas.removeEventListener('mouseup', publicAPI.handleMouseUp);
-    canvas.removeEventListener('mousemove', publicAPI.handleMouseMove);
-    canvas.removeEventListener('touchstart', publicAPI.handleTouchStart);
-    canvas.removeEventListener('touchend', publicAPI.handleTouchEnd);
-    canvas.removeEventListener('touchcancel', publicAPI.handleTouchEnd);
-    canvas.removeEventListener('touchmove', publicAPI.handleTouchMove);
+    model.canvas.removeEventListener('touchstart', publicAPI.handleTouchStart);
+    model.canvas = null;
   };
 
   publicAPI.handleKeyPress = function (event) {
@@ -49357,6 +51089,7 @@ function vtkRenderWindowInteractor(publicAPI, model) {
   };
 
   publicAPI.handleMouseDown = function (event) {
+    interactionRegistration(true);
     event.stopPropagation();
     event.preventDefault();
 
@@ -49403,7 +51136,7 @@ function vtkRenderWindowInteractor(publicAPI, model) {
   };
 
   publicAPI.isAnimating = function () {
-    return model.animationRequest !== null;
+    return model.vrAnimation || model.animationRequest !== null;
   };
 
   publicAPI.cancelAnimation = function (requestor) {
@@ -49413,6 +51146,57 @@ function vtkRenderWindowInteractor(publicAPI, model) {
       cancelAnimationFrame(model.animationRequest);
       model.animationRequest = null;
       publicAPI.forceRender();
+    }
+  };
+
+  publicAPI.switchToVRAnimation = function () {
+    // cancel existing animation if any
+    if (model.animationRequest) {
+      cancelAnimationFrame(model.animationRequest);
+      model.animationRequest = null;
+    }
+    model.vrAnimation = true;
+  };
+
+  publicAPI.returnFromVRAnimation = function () {
+    model.vrAnimation = false;
+  };
+
+  publicAPI.updateGamepads = function (displayId) {
+    var gamepads = navigator.getGamepads();
+
+    // watch for when buttons change state and fire events
+    for (var i = 0; i < gamepads.length; ++i) {
+      var gp = gamepads[i];
+      if (gp && gp.displayId === displayId) {
+        if (!(gp.index in model.lastGamepadValues)) {
+          model.lastGamepadValues[gp.index] = { buttons: {} };
+        }
+        for (var b = 0; b < gp.buttons.length; ++b) {
+          if (!(b in model.lastGamepadValues[gp.index].buttons)) {
+            model.lastGamepadValues[gp.index].buttons[b] = false;
+          }
+          if (model.lastGamepadValues[gp.index].buttons[b] !== gp.buttons[b].pressed) {
+            publicAPI.button3DEvent({
+              gamepad: gp,
+              position: gp.pose.position,
+              orientation: gp.pose.orientation,
+              pressed: gp.buttons[b].pressed,
+              device: gp.hand === 'left' ? Device.LeftController : Device.RightController,
+              input: deviceInputMap[gp.id] && deviceInputMap[gp.id][b] ? deviceInputMap[gp.id][b] : Input.Trigger
+            });
+            model.lastGamepadValues[gp.index].buttons[b] = gp.buttons[b].pressed;
+          }
+          if (model.lastGamepadValues[gp.index].buttons[b]) {
+            publicAPI.move3DEvent({
+              gamepad: gp,
+              position: gp.pose.position,
+              orientation: gp.pose.orientation,
+              device: gp.hand === 'left' ? Device.LeftController : Device.RightController
+            });
+          }
+        }
+      }
     }
   };
 
@@ -49474,6 +51258,7 @@ function vtkRenderWindowInteractor(publicAPI, model) {
   };
 
   publicAPI.handleMouseUp = function (event) {
+    interactionRegistration(false);
     event.stopPropagation();
     event.preventDefault();
 
@@ -49495,6 +51280,7 @@ function vtkRenderWindowInteractor(publicAPI, model) {
   };
 
   publicAPI.handleTouchStart = function (event) {
+    interactionRegistration(true);
     event.stopPropagation();
     event.preventDefault();
 
@@ -49521,6 +51307,7 @@ function vtkRenderWindowInteractor(publicAPI, model) {
   };
 
   publicAPI.handleTouchEnd = function (event) {
+    interactionRegistration(false);
     event.stopPropagation();
     event.preventDefault();
 
@@ -49593,9 +51380,6 @@ function vtkRenderWindowInteractor(publicAPI, model) {
 
   //----------------------------------------------------------------------
   publicAPI.forceRender = function () {
-    // if (model.renderWindow && model.enabled && model.enableRender) {
-    //   model.renderWindow.render();
-    // }
     if (model.view && model.enabled && model.enableRender) {
       model.view.traverseAllPasses();
     }
@@ -49615,13 +51399,13 @@ function vtkRenderWindowInteractor(publicAPI, model) {
   };
 
   // create the generic Event methods
-  eventsWeHandle.forEach(function (eventName) {
+  handledEvents.forEach(function (eventName) {
     var lowerFirst = eventName.charAt(0).toLowerCase() + eventName.slice(1);
-    publicAPI[lowerFirst + 'Event'] = function () {
+    publicAPI[lowerFirst + 'Event'] = function (arg) {
       if (!model.enabled) {
         return;
       }
-      publicAPI['invoke' + eventName]({ type: eventName });
+      publicAPI['invoke' + eventName]({ type: eventName, calldata: arg });
     };
   });
 
@@ -49907,7 +51691,8 @@ var DEFAULT_VALUES = {
   animationRequest: null,
   requestAnimationCount: 0,
   lastFrameTime: 0.1,
-  wheelTimeoutID: 0
+  wheelTimeoutID: 0,
+  lastGamepadValues: {}
 };
 
 // ----------------------------------------------------------------------------
@@ -49929,7 +51714,7 @@ function extend(publicAPI, model) {
   _macro2.default.obj(publicAPI, model);
 
   _macro2.default.event(publicAPI, model, 'RenderEvent');
-  eventsWeHandle.forEach(function (eventName) {
+  handledEvents.forEach(function (eventName) {
     return _macro2.default.event(publicAPI, model, eventName);
   });
 
@@ -49955,10 +51740,10 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 
 // ----------------------------------------------------------------------------
 
-exports.default = Object.assign({ newInstance: newInstance, extend: extend });
+exports.default = Object.assign({ newInstance: newInstance, extend: extend, handledEvents: handledEvents }, _Constants2.default);
 
 /***/ }),
-/* 231 */
+/* 235 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -49974,11 +51759,11 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _InteractorObserver = __webpack_require__(232);
+var _InteractorObserver = __webpack_require__(236);
 
 var _InteractorObserver2 = _interopRequireDefault(_InteractorObserver);
 
-var _Constants = __webpack_require__(109);
+var _Constants = __webpack_require__(237);
 
 var _Constants2 = _interopRequireDefault(_Constants);
 
@@ -50002,10 +51787,11 @@ var stateNames = {
   Zoom: States.IS_ZOOM,
   Timer: States.IS_TIMER,
   TwoPointer: States.IS_TWO_POINTER,
-  UniformScale: States.IS_USCALE
+  UniformScale: States.IS_USCALE,
+  CameraPose: States.IS_CAMERA_POSE
 };
 
-var events = ['Animation', 'Enter', 'Leave', 'MouseMove', 'LeftButtonPress', 'LeftButtonRelease', 'MiddleButtonPress', 'MiddleButtonRelease', 'RightButtonPress', 'RightButtonRelease', 'MouseWheelForward', 'MouseWheelBackward', 'Expose', 'Configure', 'Timer', 'KeyPress', 'KeyUp', 'Char', 'Delete', 'Pinch', 'Pan', 'Rotate', 'Tap', 'LongTap', 'Swipe'];
+var events = ['Animation', 'Enter', 'Leave', 'MouseMove', 'LeftButtonPress', 'LeftButtonRelease', 'MiddleButtonPress', 'MiddleButtonRelease', 'RightButtonPress', 'RightButtonRelease', 'MouseWheelForward', 'MouseWheelBackward', 'Expose', 'Configure', 'Timer', 'KeyPress', 'KeyUp', 'Char', 'Delete', 'Pinch', 'Pan', 'Rotate', 'Tap', 'LongTap', 'Swipe', 'Button3D', 'Move3D'];
 
 // ----------------------------------------------------------------------------
 // vtkInteractorStyle methods
@@ -50032,9 +51818,9 @@ function vtkInteractorStyle(publicAPI, model) {
 
     if (i) {
       events.forEach(function (eventName) {
-        model.unsubscribes.push(i['on' + eventName](function () {
+        model.unsubscribes.push(i['on' + eventName](function (data) {
           if (publicAPI['handle' + eventName]) {
-            publicAPI['handle' + eventName]();
+            publicAPI['handle' + eventName](data);
           }
         }));
       });
@@ -50201,7 +51987,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, _Constants2.default);
 
 /***/ }),
-/* 232 */
+/* 236 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -50400,7 +52186,45 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, STATIC);
 
 /***/ }),
-/* 233 */
+/* 237 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+var States = exports.States = {
+  IS_START: 0,
+  IS_NONE: 0,
+
+  IS_ROTATE: 1,
+  IS_PAN: 2,
+  IS_SPIN: 3,
+  IS_DOLLY: 4,
+  IS_ZOOM: 5,
+  IS_USCALE: 6,
+  IS_TIMER: 7,
+  IS_FORWARDFLY: 8,
+  IS_REVERSEFLY: 9,
+  IS_TWO_POINTER: 10,
+  IS_CAMERA_POSE: 11,
+
+  IS_ANIM_OFF: 0,
+  IS_ANIM_ON: 1,
+
+  IS_WINDOW_LEVEL: 1024,
+  IS_PICK: 1025,
+  IS_SLICE: 1026
+};
+
+exports.default = {
+  States: States
+};
+
+/***/ }),
+/* 238 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -50416,7 +52240,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _DataArray = __webpack_require__(5);
+var _DataArray = __webpack_require__(4);
 
 var _DataArray2 = _interopRequireDefault(_DataArray);
 
@@ -50510,7 +52334,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, STATIC);
 
 /***/ }),
-/* 234 */
+/* 239 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -50530,11 +52354,11 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _DataSet = __webpack_require__(51);
+var _DataSet = __webpack_require__(53);
 
 var _DataSet2 = _interopRequireDefault(_DataSet);
 
-var _Points = __webpack_require__(26);
+var _Points = __webpack_require__(21);
 
 var _Points2 = _interopRequireDefault(_Points);
 
@@ -50600,7 +52424,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 235 */
+/* 240 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -50759,7 +52583,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 236 */
+/* 241 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -50922,7 +52746,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 237 */
+/* 242 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -51069,12 +52893,32 @@ function computeOpacities(gaussians) {
 
 // ----------------------------------------------------------------------------
 
+function applyGaussianToPiecewiseFunction(gaussians, sampling, rangeToUse, piecewiseFunction) {
+  var opacities = computeOpacities(gaussians, sampling);
+  var nodes = [];
+  var delta = (rangeToUse[1] - rangeToUse[0]) / (opacities.length - 1);
+  var midpoint = 0.5;
+  var sharpness = 0;
+  for (var index = 0; index < opacities.length; index++) {
+    var x = rangeToUse[0] + delta * index;
+    var y = opacities[index];
+    nodes.push({ x: x, y: y, midpoint: midpoint, sharpness: sharpness });
+  }
+
+  piecewiseFunction.removeAllPoints();
+  piecewiseFunction.set({ nodes: nodes }, true);
+  piecewiseFunction.sortAndUpdateRange();
+}
+
+// ----------------------------------------------------------------------------
+
 function drawChart(ctx, area, values) {
   var style = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : { lineWidth: 1, strokeStyle: '#000' };
 
   var verticalScale = area[3];
   var horizontalScale = area[2] / (values.length - 1);
   var height = ctx.canvas.height;
+
   var fill = !!style.fillStyle;
 
   ctx.lineWidth = style.lineWidth;
@@ -51176,7 +53020,13 @@ function createTouchClickListener() {
   }
 
   var id = TOUCH_CLICK.length;
-  TOUCH_CLICK.push({ callbacks: callbacks, timeout: 0, deltaT: 200, count: 0, ready: false });
+  TOUCH_CLICK.push({
+    callbacks: callbacks,
+    timeout: 0,
+    deltaT: 200,
+    count: 0,
+    ready: false
+  });
   return id;
 }
 
@@ -51261,12 +53111,13 @@ function listenerSelector(condition, ok, ko) {
 // ----------------------------------------------------------------------------
 
 var STATIC = exports.STATIC = {
+  applyGaussianToPiecewiseFunction: applyGaussianToPiecewiseFunction,
   computeOpacities: computeOpacities,
-  drawChart: drawChart,
-  normalizeCoordinates: normalizeCoordinates,
-  findGaussian: findGaussian,
   createListener: createListener,
-  listenerSelector: listenerSelector
+  drawChart: drawChart,
+  findGaussian: findGaussian,
+  listenerSelector: listenerSelector,
+  normalizeCoordinates: normalizeCoordinates
 };
 
 // ----------------------------------------------------------------------------
@@ -51410,7 +53261,12 @@ function vtkPiecewiseGaussianWidget(publicAPI, model) {
             // Fake active action
             setImmediate(function () {
               publicAPI.onDown(x, y);
-              model.dragAction = { position: [0, 0], action: action, gaussian: gaussian, originalGaussian: originalGaussian };
+              model.dragAction = {
+                position: [0, 0],
+                action: action,
+                gaussian: gaussian,
+                originalGaussian: originalGaussian
+              };
             });
             break;
           }
@@ -51477,7 +53333,12 @@ function vtkPiecewiseGaussianWidget(publicAPI, model) {
       model.canvas.style.cursor = ACTION_TO_CURSOR[actionName];
       var action = ACTIONS[actionName];
       var originalGaussian = Object.assign({}, gaussian);
-      model.dragAction = { position: [xNormalized, yNormalized], action: action, gaussian: gaussian, originalGaussian: originalGaussian };
+      model.dragAction = {
+        position: [xNormalized, yNormalized],
+        action: action,
+        gaussian: gaussian,
+        originalGaussian: originalGaussian
+      };
     }
 
     if (newActive !== model.activeGaussian) {
@@ -51669,26 +53530,43 @@ function vtkPiecewiseGaussianWidget(publicAPI, model) {
     }
 
     // Draw histogram
-    drawChart(ctx, graphArea, model.histogram, { lineWidth: 1, strokeStyle: model.style.histogramColor, fillStyle: model.style.histogramColor });
+    drawChart(ctx, graphArea, model.histogram, {
+      lineWidth: 1,
+      strokeStyle: model.style.histogramColor,
+      fillStyle: model.style.histogramColor
+    });
 
     // Draw gaussians
-    drawChart(ctx, graphArea, model.opacities, { lineWidth: model.style.strokeWidth, strokeStyle: model.style.strokeColor });
+    drawChart(ctx, graphArea, model.opacities, {
+      lineWidth: model.style.strokeWidth,
+      strokeStyle: model.style.strokeColor
+    });
 
     // Draw color function if any
     if (model.colorTransferFunction) {
       var rangeToUse = model.dataRange || model.colorTransferFunction.getMappingRange();
-      if (!model.colorCanvas || model.colorCanvasMTime < model.colorTransferFunction.getMTime()) {
+      if (!model.colorCanvas || model.colorCanvasMTime !== model.colorTransferFunction.getMTime()) {
         model.colorCanvasMTime = model.colorTransferFunction.getMTime();
         model.colorCanvas = updateColorCanvas(model.colorTransferFunction, graphArea[2], rangeToUse, model.colorCanvas);
       }
       ctx.save();
-      drawChart(ctx, graphArea, model.opacities, { lineWidth: 1, strokeStyle: 'rgba(0,0,0,0)', fillStyle: 'rgba(0,0,0,1)', clip: true });
+      drawChart(ctx, graphArea, model.opacities, {
+        lineWidth: 1,
+        strokeStyle: 'rgba(0,0,0,0)',
+        fillStyle: 'rgba(0,0,0,1)',
+        clip: true
+      });
       ctx.drawImage(model.colorCanvas, graphArea[0], graphArea[1]);
       ctx.restore();
     } else if (model.backgroundImage) {
       model.colorCanvas = updateColorCanvasFromImage(model.backgroundImage, graphArea[2], model.colorCanvas);
       ctx.save();
-      drawChart(ctx, graphArea, model.opacities, { lineWidth: 1, strokeStyle: 'rgba(0,0,0,0)', fillStyle: 'rgba(0,0,0,1)', clip: true });
+      drawChart(ctx, graphArea, model.opacities, {
+        lineWidth: 1,
+        strokeStyle: 'rgba(0,0,0,0)',
+        fillStyle: 'rgba(0,0,0,1)',
+        clip: true
+      });
       ctx.drawImage(model.colorCanvas, graphArea[0], graphArea[1]);
       ctx.restore();
     }
@@ -51697,7 +53575,10 @@ function vtkPiecewiseGaussianWidget(publicAPI, model) {
     var activeGaussian = model.gaussians[model.activeGaussian] || model.gaussians[model.selectedGaussian];
     if (activeGaussian) {
       var activeOpacities = computeOpacities([activeGaussian], graphArea[2]);
-      drawChart(ctx, graphArea, activeOpacities, { lineWidth: model.style.activeStrokeWidth, strokeStyle: model.style.activeColor });
+      drawChart(ctx, graphArea, activeOpacities, {
+        lineWidth: model.style.activeStrokeWidth,
+        strokeStyle: model.style.activeColor
+      });
       // Draw controls
       var xCenter = graphArea[0] + activeGaussian.position * graphArea[2];
       var yTop = graphArea[1] + (1 - activeGaussian.height) * graphArea[3];
@@ -51820,7 +53701,7 @@ exports.default = Object.assign({ newInstance: newInstance, extend: extend }, ST
 /* WEBPACK VAR INJECTION */}.call(exports, __webpack_require__(76).setImmediate))
 
 /***/ }),
-/* 238 */
+/* 243 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -51842,7 +53723,7 @@ var _Prop3D = __webpack_require__(110);
 
 var _Prop3D2 = _interopRequireDefault(_Prop3D);
 
-var _VolumeProperty = __webpack_require__(239);
+var _VolumeProperty = __webpack_require__(244);
 
 var _VolumeProperty2 = _interopRequireDefault(_VolumeProperty);
 
@@ -52001,7 +53882,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 239 */
+/* 244 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -52017,7 +53898,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _ColorTransferFunction = __webpack_require__(54);
+var _ColorTransferFunction = __webpack_require__(55);
 
 var _ColorTransferFunction2 = _interopRequireDefault(_ColorTransferFunction);
 
@@ -52175,7 +54056,7 @@ function vtkVolumeProperty(publicAPI, model) {
       return;
     }
 
-    var val = value < 0.0 ? 0.0 : value > 1.0 ? 1.0 : value;
+    var val = Math.min(1, Math.max(0, value));
     if (model.componentData[index].componentWeight !== val) {
       model.componentData[index].componentWeight = val;
       publicAPI.modified();
@@ -52287,7 +54168,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, _Constants2.default);
 
 /***/ }),
-/* 240 */
+/* 245 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -52373,13 +54254,13 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 241 */
+/* 246 */
 /***/ (function(module, exports) {
 
 module.exports = [{"Name":"KAAMS","IndexedColors":[1,1,1,1,0,0,0,1,0,0,0,1,1,1,0,1,0,1,0,1,1,0.63,0.63,1,0.67,0.5,0.33,1,0.5,0.75,0.53,0.35,0.7,1,0.75,0.5],"Annotations":[0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11]},{"ColorSpace":"Diverging","Name":"Cool to Warm","NanColor":[1,1,0],"RGBPoints":[0,0.23137254902,0.298039215686,0.752941176471,0.5,0.865,0.865,0.865,1,0.705882352941,0.0156862745098,0.149019607843]},{"ColorSpace":"Lab","Creator":"Francesca Samsel","Name":"Cool to Warm (Extended)","NanColor":[0.25,0,0],"RGBPoints":[0,0,0,0.34902,0.03125,0.039216,0.062745,0.380392,0.0625,0.062745,0.117647,0.411765,0.09375,0.090196,0.184314,0.45098,0.125,0.12549,0.262745,0.501961,0.15625,0.160784,0.337255,0.541176,0.1875,0.2,0.396078,0.568627,0.21875,0.239216,0.454902,0.6,0.25,0.286275,0.521569,0.65098,0.28125,0.337255,0.592157,0.701961,0.3125,0.388235,0.654902,0.74902,0.34375,0.466667,0.737255,0.819608,0.375,0.572549,0.819608,0.878431,0.40625,0.654902,0.866667,0.909804,0.4375,0.752941,0.917647,0.941176,0.46875,0.823529,0.956863,0.968627,0.5,0.988235,0.960784,0.901961,0.5,0.941176,0.984314,0.988235,0.52,0.988235,0.945098,0.85098,0.54,0.980392,0.898039,0.784314,0.5625,0.968627,0.835294,0.698039,0.59375,0.94902,0.733333,0.588235,0.625,0.929412,0.65098,0.509804,0.65625,0.909804,0.564706,0.435294,0.6875,0.878431,0.458824,0.352941,0.71875,0.839216,0.388235,0.286275,0.75,0.760784,0.294118,0.211765,0.78125,0.701961,0.211765,0.168627,0.8125,0.65098,0.156863,0.129412,0.84375,0.6,0.094118,0.094118,0.875,0.54902,0.066667,0.098039,0.90625,0.501961,0.05098,0.12549,0.9375,0.45098,0.054902,0.172549,0.96875,0.4,0.054902,0.192157,1,0.34902,0.070588,0.211765]},{"ColorSpace":"Diverging","Name":"Warm to Cool","NanColor":[1,1,0],"RGBPoints":[0,0.705882352941,0.0156862745098,0.149019607843,0.5,0.865,0.865,0.865,1,0.23137254902,0.298039215686,0.752941176471]},{"ColorSpace":"Lab","Creator":"Francesca Samsel","Name":"Warm to Cool (Extended)","NanColor":[0.250004,0,0],"RGBPoints":[0,0.34902,0,0.129412,0.025,0.4,0.00392157,0.101961,0.05,0.470588,0.0156863,0.0901961,0.075,0.54902,0.027451,0.0705882,0.1,0.619608,0.0627451,0.0431373,0.125,0.690196,0.12549,0.0627451,0.15,0.741176,0.184314,0.0745098,0.175,0.788235,0.266667,0.0941176,0.2,0.811765,0.345098,0.113725,0.225,0.831373,0.411765,0.133333,0.25,0.85098,0.47451,0.145098,0.275,0.870588,0.54902,0.156863,0.3,0.878431,0.619608,0.168627,0.325,0.890196,0.658824,0.196078,0.35,0.909804,0.717647,0.235294,0.375,0.929412,0.776471,0.278431,0.395522,0.94902,0.823529,0.321569,0.418905,0.968627,0.87451,0.407843,0.444278,0.980392,0.917647,0.509804,0.470149,0.988235,0.956863,0.643137,0.483582,0.992157,0.964706,0.713725,0.499,0.988235,0.980392,0.870588,0.5,1,1,1,0.501,0.913725,0.988235,0.937255,0.516418,0.827451,0.980392,0.886275,0.531343,0.764706,0.980392,0.866667,0.546766,0.658824,0.980392,0.843137,0.564179,0.572549,0.964706,0.835294,0.587562,0.423529,0.941176,0.87451,0.60597,0.262745,0.901961,0.862745,0.629851,0.0705882,0.854902,0.870588,0.651741,0.0509804,0.8,0.85098,0.681592,0.0235294,0.709804,0.831373,0.712935,0.0313725,0.615686,0.811765,0.75,0.0313725,0.537255,0.788235,0.775,0.0392157,0.466667,0.768627,0.8,0.0509804,0.396078,0.741176,0.825,0.054902,0.317647,0.709804,0.85,0.054902,0.243137,0.678431,0.875,0.0431373,0.164706,0.639216,0.9,0.0313725,0.0980392,0.6,0.925,0.0392157,0.0392157,0.560784,0.95,0.105882,0.0509804,0.509804,0.975,0.113725,0.0235294,0.45098,1,0.12549,0,0.380392]},{"ColorSpace":"RGB","Name":"Rainbow Desaturated","NanColor":[1,1,0],"RGBPoints":[0,0.278431372549,0.278431372549,0.858823529412,0.143,0,0,0.360784313725,0.285,0,1,1,0.429,0,0.501960784314,0,0.571,1,1,0,0.714,1,0.380392156863,0,0.857,0.419607843137,0,0,1,0.878431372549,0.301960784314,0.301960784314]},{"ColorSpace":"RGB","Name":"Cold and Hot","NanColor":[1,1,0],"RGBPoints":[0,0,1,1,0.45,0,0,1,0.5,0,0,0.501960784314,0.55,1,0,0,1,1,1,0]},{"ColorSpace":"RGB","Name":"Black-Body Radiation","NanColor":[0,0.498039215686,1],"RGBPoints":[0,0,0,0,0.4,0.901960784314,0,0,0.8,0.901960784314,0.901960784314,0,1,1,1,1]},{"ColorSpace":"RGB","Name":"X Ray","NanColor":[1,0,0],"RGBPoints":[0,1,1,1,1,0,0,0]},{"ColorSpace":"RGB","Name":"Grayscale","NanColor":[1,0,0],"RGBPoints":[0,0,0,0,1,1,1,1]},{"ColorSpace":"RGB","Name":"Black, Blue and White","NanColor":[1,1,0],"RGBPoints":[0,0,0,0,0.333,0,0,0.501960784314,0.666,0,0.501960784314,1,1,1,1,1]},{"ColorSpace":"RGB","Name":"Black, Orange and White","NanColor":[1,1,0],"RGBPoints":[0,0,0,0,0.333,0.501960784314,0,0,0.666,1,0.501960784314,0,1,1,1,1]},{"ColorSpace":"Lab","Creator":"Francesca Samsel","Name":"Linear YGB 1211g","NanColor":[0.25,0,0],"RGBPoints":[0,1,0.988235,0.968627,0.02,1,0.952941,0.878431,0.05,0.968627,0.905882,0.776471,0.1,0.94902,0.898039,0.647059,0.15,0.901961,0.878431,0.556863,0.2,0.847059,0.858824,0.482353,0.25,0.690196,0.819608,0.435294,0.3,0.513725,0.768627,0.384314,0.35,0.337255,0.721569,0.337255,0.4,0.278431,0.658824,0.392157,0.45,0.231373,0.639216,0.435294,0.5,0.203922,0.6,0.486275,0.55,0.172549,0.568627,0.537255,0.6,0.141176,0.517647,0.54902,0.65,0.133333,0.458824,0.541176,0.7,0.12549,0.396078,0.529412,0.75,0.117647,0.321569,0.521569,0.8,0.121569,0.258824,0.509804,0.85,0.133333,0.227451,0.501961,0.9,0.145098,0.192157,0.490196,0.95,0.188235,0.164706,0.470588,1,0.258824,0.196078,0.439216]},{"ColorSpace":"CIELAB","Creator":"Francesca Samsel","Name":"Linear Green (Gr4L)","NanColor":[0.25,0,0],"RGBPoints":[0,0.054902,0.109804,0.121569,0.05,0.07451,0.172549,0.180392,0.1,0.086275,0.231373,0.219608,0.15,0.094118,0.278431,0.25098,0.2,0.109804,0.34902,0.278431,0.25,0.113725,0.4,0.278431,0.3,0.117647,0.45098,0.270588,0.35,0.117647,0.490196,0.243137,0.4,0.113725,0.521569,0.203922,0.45,0.109804,0.54902,0.152941,0.5,0.082353,0.588235,0.082353,0.55,0.109804,0.631373,0.05098,0.6,0.211765,0.678431,0.082353,0.65,0.317647,0.721569,0.113725,0.7,0.431373,0.760784,0.160784,0.75,0.556863,0.8,0.239216,0.8,0.666667,0.839216,0.294118,0.85,0.784314,0.878431,0.396078,0.9,0.886275,0.921569,0.533333,0.95,0.960784,0.94902,0.670588,1,1,0.984314,0.901961]},{"ColorSpace":"Lab","Creator":"Francesca Samsel","Name":"Linear Blue (8_31f)","NanColor":[0.25,0,0],"RGBPoints":[0,0.960784,1,0.980392,0.05,0.815686,0.960784,0.913725,0.1,0.670588,0.929412,0.870588,0.15,0.556863,0.901961,0.843137,0.2,0.478431,0.870588,0.823529,0.25,0.439216,0.831373,0.803922,0.3,0.4,0.8,0.788235,0.35,0.376471,0.768627,0.768627,0.4,0.34902,0.709804,0.729412,0.45,0.32549,0.654902,0.690196,0.5,0.301961,0.607843,0.658824,0.55,0.247059,0.545098,0.619608,0.6,0.239216,0.494118,0.580392,0.65,0.227451,0.439216,0.541176,0.7,0.227451,0.403922,0.521569,0.75,0.231373,0.368627,0.501961,0.8,0.227451,0.321569,0.470588,0.85,0.219608,0.282353,0.439216,0.9,0.192157,0.235294,0.4,0.95,0.160784,0.184314,0.34902,1,0.133333,0.12549,0.301961]},{"ColorSpace":"HSV","Name":"Blue to Red Rainbow","NanColor":[0.498039215686,0.498039215686,0.498039215686],"RGBPoints":[0,0,0,1,1,1,0,0]},{"ColorSpace":"HSV","Name":"Red to Blue Rainbow","NanColor":[0.498039215686,0.498039215686,0.498039215686],"RGBPoints":[0,1,0,0,1,0,0,1]},{"ColorSpace":"RGB","Name":"Rainbow Blended White","NanColor":[1,1,0],"RGBPoints":[0,1,1,1,0.17,0,0,1,0.34,0,1,1,0.5,0,1,0,0.67,1,1,0,0.84,1,0,0,1,0.878431372549,0,1]},{"ColorSpace":"RGB","Name":"Rainbow Blended Grey","NanColor":[1,1,0],"RGBPoints":[0,0.317647058824,0.341176470588,0.43137254902,0.17,0,0,1,0.34,0,1,1,0.5,0,1,0,0.67,1,1,0,0.84,1,0,0,1,0.878431372549,0,1]},{"ColorSpace":"RGB","Name":"Rainbow Blended Black","NanColor":[1,1,0],"RGBPoints":[0,0,0,0,0.17,0,0,1,0.34,0,1,1,0.5,0,1,0,0.67,1,1,0,0.84,1,0,0,1,0.878431372549,0,1]},{"ColorSpace":"RGB","Name":"Blue to Yellow","NanColor":[1,0,0],"RGBPoints":[0,0.0392156862745,0.0392156862745,0.949019607843,1,0.949019607843,0.949019607843,0.0392156862745]},{"ColorSpace":"HSV","Name":"blot","RGBPoints":[0,0,0,1,0.166,0,0,1,0.167,1,0,1,0.332,1,0,1,0.333,0,1,1,0.5,0,1,1,0.501,0,1,0,0.666,0,1,0,0.667,1,1,0,0.832,1,1,0,0.833,1,0,0,1,1,0,0]},{"ColorSpace":"Lab","Name":"CIELab Blue to Red","NanColor":[1,1,0],"RGBPoints":[0,0,0.6,0.749019607843,1,0.76862745098,0.466666666667,0.341176470588]},{"ColorSpace":"RGB","Name":"jet","RGBPoints":[-1,0,0,0.5625,-0.777778,0,0,1,-0.269841,0,1,1,-0.015873,0.5,1,0.5,0.238095,1,1,0,0.746032,1,0,0,1,0.5,0,0]},{"ColorSpace":"RGB","Name":"rainbow","RGBPoints":[-1,0,0,1,-0.5,0,1,1,0,0,1,0,0.5,1,1,0,1,1,0,0]},{"ColorSpace":"Lab","Name":"erdc_rainbow_bright","RGBPoints":[-1,0.32549,0.14902,0.960784,-0.866221,0.297047,0.375586,0.963836,-0.732441,0.180302,0.536818,0.964627,-0.598662,0.1302,0.649207,0.929647,-0.464883,0.0445143,0.749654,0.855998,-0.331104,0.0271325,0.830713,0.721527,-0.197324,0.259504,0.866145,0.543555,-0.0635452,0.428364,0.890725,0.329819,0.0702341,0.568503,0.898508,0.187623,0.204013,0.738259,0.890317,0.0825461,0.337793,0.84546,0.86136,0.0147555,0.471572,0.912191,0.808018,0,0.605351,0.962848,0.710445,0,0.73913,0.999469,0.600258,0.0176284,0.87291,0.994156,0.445975,0.193912,1,0.980407,0.247105,0.262699]},{"ColorSpace":"Lab","Name":"erdc_rainbow_dark","RGBPoints":[-1,0,0,0.423499,-0.866221,0,0.119346,0.529237,-0.732441,0,0.238691,0.634976,-0.598662,0,0.346852,0.68788,-0.464883,0,0.45022,0.718141,-0.331104,0,0.553554,0.664839,-0.197324,0,0.651082,0.519303,-0.0635452,0.115841,0.72479,0.352857,0.0702341,0.326771,0.781195,0.140187,0.204013,0.522765,0.798524,0.0284624,0.337793,0.703162,0.788685,0.00885756,0.471572,0.845118,0.751133,0,0.605351,0.955734,0.690825,0,0.73913,0.995402,0.567916,0.0618524,0.87291,0.987712,0.403398,0.164851,1,0.980407,0.247105,0.262699]},{"ColorSpace":"Lab","Name":"nic_CubicL","RGBPoints":[-1,0.479965,0.0118108,0.5307,-0.87451,0.522213,0.0551282,0.706919,-0.74902,0.50839,0.237278,0.867764,-0.623529,0.451617,0.373834,0.987255,-0.498039,0.39365,0.497255,0.97506,-0.372549,0.328631,0.599639,0.891843,-0.247059,0.250043,0.690286,0.778553,-0.121569,0.249656,0.764905,0.645857,0.00392157,0.297954,0.821466,0.50449,0.129412,0.337509,0.872595,0.358447,0.254902,0.430011,0.913789,0.297079,0.380392,0.587191,0.931381,0.333353,0.505882,0.727937,0.93591,0.353742,0.631373,0.826403,0.921081,0.365066,0.756863,0.893201,0.846317,0.372662,0.882353,0.965347,0.73884,0.378506,1,0.983235,0.597451,0.366856]},{"ColorSpace":"Lab","Name":"nic_CubicYF","RGBPoints":[-1,0.5151,0.0482,0.6697,-0.87451,0.520711,0.168955,0.800574,-0.74902,0.493694,0.278596,0.911824,-0.623529,0.440026,0.369475,0.984978,-0.498039,0.398932,0.457593,0.987053,-0.372549,0.350651,0.540644,0.929608,-0.247059,0.298827,0.615625,0.857729,-0.121569,0.239928,0.685061,0.769531,0.00392157,0.228832,0.739349,0.673287,0.129412,0.263297,0.78608,0.569988,0.254902,0.298107,0.828337,0.460214,0.380392,0.33092,0.864071,0.352674,0.505882,0.38306,0.898169,0.287309,0.631373,0.49023,0.917481,0.307961,0.756863,0.62372,0.926026,0.332309,0.882353,0.717458,0.92527,0.342476,1,0.8,0.9255,0.3529]},{"ColorSpace":"Lab","Name":"gist_earth","RGBPoints":[-1,0,0,0,-0.87451,0.239216,0.027451,0.415686,-0.74902,0.0901961,0.254902,0.556863,-0.623529,0.0941176,0.352941,0.54902,-0.498039,0.105882,0.435294,0.533333,-0.372549,0.12549,0.52549,0.501961,-0.247059,0.156863,0.596078,0.443137,-0.121569,0.196078,0.65098,0.380392,0.00392157,0.282353,0.717647,0.301961,0.129412,0.466667,0.772549,0.27451,0.254902,0.678431,0.784314,0.309804,0.380392,0.901961,0.756863,0.376471,0.505882,0.992157,0.705882,0.521569,0.631373,1,0.721569,0.701961,0.756863,1,0.784314,0.784314,0.882353,1,0.866667,0.866667,1,1,1,1]},{"ColorSpace":"Lab","Name":"2hot","RGBPoints":[-1,0.0416667,0,0,-0.873016,0.208333,0,0,-0.746032,0.375,0,0,-0.619048,0.541667,0,0,-0.492063,0.708333,0,0,-0.365079,0.854137,0,0,-0.238095,0.937488,0.039062,0,-0.111111,1,0.208333,0,0.015873,1,0.375,0,0.142857,1,0.541667,0,0.269841,1,0.708333,0,0.396825,1,0.858805,0.03125,0.52381,1,0.947392,0.15625,0.650794,1,1,0.3125,0.777778,1,1,0.5625,0.904762,1,1,0.8125,1,1,1,1]},{"ColorSpace":"Lab","Name":"erdc_red2yellow_BW","RGBPoints":[-1,7.54296e-7,0,0.0000109827,-0.87451,0.18285,0.0264094,0,-0.74902,0.3066,0,0,-0.623529,0.422841,0,0,-0.498039,0.522945,0,0,-0.372549,0.605721,0,0,-0.247059,0.672502,0.14168,0,-0.121569,0.728167,0.244025,0,0.00392157,0.781215,0.333454,0,0.129412,0.825,0.423586,0,0.254902,0.855893,0.516793,0,0.380392,0.880491,0.608846,0,0.505882,0.910305,0.695505,0,0.631373,0.94109,0.779067,0.223528,0.756863,0.967873,0.858572,0.473521,0.882353,0.986815,0.933211,0.751583,1,1,1,0.999997]},{"ColorSpace":"Lab","Name":"erdc_marine2gold_BW","RGBPoints":[-1,1.11641e-7,0,0.00000162551,-0.87451,0.0413146,0.0619808,0.209857,-0.74902,0.0185557,0.101341,0.350684,-0.623529,0.00486405,0.149847,0.461054,-0.498039,0.0836345,0.210845,0.517906,-0.372549,0.173222,0.276134,0.541793,-0.247059,0.259857,0.343877,0.535869,-0.121569,0.362299,0.408124,0.504293,0.00392157,0.468266,0.468276,0.468257,0.129412,0.582781,0.527545,0.374914,0.254902,0.691591,0.585251,0.274266,0.380392,0.784454,0.645091,0.247332,0.505882,0.862299,0.710383,0.27518,0.631373,0.920863,0.782923,0.351563,0.756863,0.955792,0.859699,0.533541,0.882353,0.976162,0.93433,0.780671,1,1,1,0.999983]},{"ColorSpace":"Lab","Name":"erdc_blue2gold_BW","RGBPoints":[-1,0,0,0,-0.87451,0.0742735,0.0440331,0.230013,-0.74902,0.125276,0.0258685,0.415826,-0.623529,0.143879,0.0163031,0.591346,-0.498039,0.212261,0.0627855,0.705239,-0.372549,0.306048,0.141178,0.763636,-0.247059,0.391537,0.232286,0.773263,-0.121569,0.461734,0.336633,0.708321,0.00392157,0.54209,0.427581,0.590007,0.129412,0.61704,0.508623,0.460978,0.254902,0.702703,0.579586,0.309117,0.380392,0.790336,0.644811,0.170397,0.505882,0.870173,0.710733,0.117134,0.631373,0.93656,0.781991,0.157144,0.756863,0.965672,0.862068,0.409836,0.882353,0.985751,0.936296,0.714162,1,1,1,0.999999]},{"ColorSpace":"Lab","Name":"erdc_sapphire2gold_BW","RGBPoints":[-1,0.107704,0.107708,0.107694,-0.87451,0.1851,0.112354,0.308554,-0.74902,0.236782,0.114233,0.48788,-0.623529,0.28296,0.126187,0.639464,-0.498039,0.344787,0.171643,0.739713,-0.372549,0.413325,0.242371,0.76913,-0.247059,0.481863,0.3131,0.719841,-0.121569,0.550402,0.383829,0.612222,0.00392157,0.61894,0.454558,0.51126,0.129412,0.687478,0.525287,0.39993,0.254902,0.756017,0.596016,0.289923,0.380392,0.824555,0.666745,0.255498,0.505882,0.892979,0.736822,0.27696,0.631373,0.938851,0.804966,0.351734,0.756863,0.966491,0.874853,0.53572,0.882353,0.982105,0.94153,0.782579,1,1,1,0.999986]},{"ColorSpace":"Lab","Name":"erdc_red2purple_BW","RGBPoints":[-1,0,0,0,-0.87451,0.167793,0.0166271,0.0431278,-0.74902,0.262608,0.0107595,0.0791181,-0.623529,0.351902,0.0101858,0.100926,-0.498039,0.441257,0.0160835,0.131919,-0.372549,0.5221,0.0555972,0.195625,-0.247059,0.593852,0.104294,0.310234,-0.121569,0.654628,0.158115,0.448486,0.00392157,0.707443,0.220914,0.570253,0.129412,0.749504,0.293268,0.67897,0.254902,0.781587,0.370517,0.779269,0.380392,0.809951,0.451099,0.855831,0.505882,0.84424,0.531462,0.900451,0.631373,0.865174,0.620901,0.91606,0.756863,0.875041,0.714054,0.910284,0.882353,0.880764,0.80554,0.896276,1,0.887572,0.887591,0.887556]},{"ColorSpace":"Lab","Name":"erdc_purple2pink_BW","RGBPoints":[-1,0,0,0,-0.87451,0.117562,0.0291202,0.175876,-0.74902,0.178368,0.0458476,0.285454,-0.623529,0.237731,0.0680173,0.387717,-0.498039,0.300877,0.0956291,0.484802,-0.372549,0.370929,0.136858,0.554985,-0.247059,0.449033,0.189273,0.58863,-0.121569,0.529971,0.245796,0.598587,0.00392157,0.609914,0.300643,0.610244,0.129412,0.697079,0.351286,0.616371,0.254902,0.785858,0.401991,0.617376,0.380392,0.862517,0.45745,0.64463,0.505882,0.91359,0.525462,0.705336,0.631373,0.932583,0.61064,0.767412,0.756863,0.922478,0.706966,0.817522,0.882353,0.901302,0.803071,0.856311,1,0.887571,0.887591,0.887549]},{"ColorSpace":"Lab","Name":"erdc_pbj_lin","RGBPoints":[-1,0,0,0,-0.87451,0.091821,0.0611476,0.10617,-0.74902,0.160311,0.0900022,0.192713,-0.623529,0.22484,0.12126,0.272128,-0.498039,0.291263,0.157469,0.340828,-0.372549,0.360015,0.200388,0.388903,-0.247059,0.437497,0.250058,0.387201,-0.121569,0.512636,0.304969,0.355955,0.00392157,0.582603,0.360874,0.33488,0.129412,0.655126,0.416374,0.306351,0.254902,0.725889,0.473329,0.279051,0.380392,0.778125,0.537928,0.302697,0.505882,0.815894,0.606931,0.382431,0.631373,0.839159,0.679308,0.497608,0.756863,0.854748,0.751666,0.631792,0.882353,0.869483,0.822508,0.768592,1,0.887572,0.887589,0.887565]},{"ColorSpace":"Lab","Name":"erdc_blue2green_muted","RGBPoints":[-1,0.107704,0.107708,0.107695,-0.87451,0.141522,0.13066,0.270741,-0.74902,0.180123,0.146119,0.42308,-0.623529,0.210161,0.169674,0.551795,-0.498039,0.239701,0.212939,0.634969,-0.372549,0.253916,0.282947,0.653641,-0.247059,0.242791,0.366933,0.608521,-0.121569,0.226302,0.446776,0.52693,0.00392157,0.236237,0.514689,0.458798,0.129412,0.274641,0.577589,0.376069,0.254902,0.349625,0.633993,0.288131,0.380392,0.4437,0.683677,0.260497,0.505882,0.536247,0.731214,0.285424,0.631373,0.628472,0.777128,0.349151,0.756863,0.718259,0.819287,0.496825,0.882353,0.804768,0.856164,0.703299,1,0.887571,0.887591,0.887548]},{"ColorSpace":"Lab","Name":"erdc_blue2green_BW","RGBPoints":[-1,3.63578e-7,0,0.00000529374,-0.87451,0.0539915,0.0577948,0.212806,-0.74902,0.0620393,0.0758942,0.388959,-0.623529,0.0697499,0.102032,0.54177,-0.498039,0.113295,0.156156,0.64334,-0.372549,0.152047,0.243196,0.670283,-0.247059,0.158096,0.344084,0.622864,-0.121569,0.151142,0.43922,0.532767,0.00392157,0.17155,0.521588,0.457719,0.129412,0.225861,0.599141,0.363997,0.254902,0.32328,0.67007,0.259083,0.380392,0.442344,0.733697,0.223754,0.505882,0.558409,0.794941,0.257411,0.631373,0.673875,0.854344,0.340822,0.756863,0.787244,0.909326,0.524717,0.882353,0.896483,0.958063,0.775914,1,1,1,0.999982]},{"ColorSpace":"Lab","Name":"GREEN-WHITE_LINEAR","RGBPoints":[-1,0,0,0,-0.87451,0,0.062745,0,-0.74902,0,0.12549,0,-0.623529,0,0.188235,0,-0.498039,0,0.25098,0,-0.372549,0,0.313725,0,-0.247059,0,0.376471,0,-0.121569,0.094118,0.439216,0,0.00392157,0.196078,0.501961,0,0.129412,0.294118,0.564706,0,0.254902,0.396078,0.627451,0,0.380392,0.498039,0.690196,0,0.505882,0.6,0.752941,0.145098,0.631373,0.701961,0.815686,0.364706,0.756863,0.8,0.878431,0.580392,0.882353,0.901961,0.941176,0.796078,1,1,1,1]},{"ColorSpace":"Lab","Name":"erdc_green2yellow_BW","RGBPoints":[-1,0,0,0,-0.87451,0,0.105542,0.0603919,-0.74902,0,0.159454,0.104148,-0.623529,0,0.219502,0.15542,-0.498039,0,0.282276,0.203811,-0.372549,0,0.346331,0.235652,-0.247059,0,0.411765,0.235428,-0.121569,0,0.477177,0.217977,0.00392157,0.0593644,0.541635,0.21361,0.129412,0.233081,0.604722,0.210591,0.254902,0.369803,0.664942,0.226536,0.380392,0.498446,0.722367,0.288237,0.505882,0.601929,0.782244,0.380815,0.631373,0.703207,0.840497,0.512134,0.756863,0.803186,0.896433,0.674462,0.882353,0.903834,0.950266,0.846715,1,1,1,0.999981]},{"ColorSpace":"Lab","Name":"blue2cyan","RGBPoints":[-1,0,0,0,-0.87451,0,0.152941,0.364706,-0.74902,0,0.254902,0.470588,-0.623529,0,0.34902,0.572549,-0.498039,0,0.443137,0.670588,-0.372549,0,0.537255,0.772549,-0.247059,0,0.627451,0.870588,-0.121569,0,0.717647,0.964706,0.00392157,0.0784314,0.772549,1,0.129412,0.207843,0.858824,1,0.254902,0.32549,0.941176,1,0.380392,0.45098,1,1,0.505882,0.560784,1,1,0.631373,0.662745,1,1,0.756863,0.760784,1,1,0.882353,0.870588,1,1,1,1,1,1]},{"ColorSpace":"Lab","Name":"erdc_blue2cyan_BW","RGBPoints":[-1,4.05298e-7,0,0.0000059012,-0.87451,0.0207526,0.0740933,0.18093,-0.74902,0,0.121033,0.30343,-0.623529,0,0.166892,0.416095,-0.498039,0,0.216768,0.524796,-0.372549,0.0164769,0.275471,0.608585,-0.247059,0.0544527,0.344824,0.659267,-0.121569,0.0880643,0.419118,0.688675,0.00392157,0.127938,0.492556,0.720256,0.129412,0.149476,0.566946,0.756918,0.254902,0.188961,0.641333,0.792122,0.380392,0.245482,0.715336,0.827609,0.505882,0.329216,0.786235,0.874761,0.631373,0.453558,0.852803,0.918466,0.756863,0.626281,0.910493,0.954,0.882353,0.82257,0.958709,0.980146,1,1,1,0.999989]},{"ColorSpace":"Lab","Name":"erdc_blue_BW","RGBPoints":[-1,0,0,0,-0.87451,0.0425591,0.0763529,0.150682,-0.74902,0.0569472,0.119154,0.275403,-0.623529,0.0635978,0.164772,0.395427,-0.498039,0.0774342,0.213851,0.510014,-0.372549,0.106815,0.267034,0.615102,-0.247059,0.122093,0.324649,0.720068,-0.121569,0.160851,0.387068,0.806956,0.00392157,0.213754,0.453516,0.878012,0.129412,0.26722,0.524656,0.932436,0.254902,0.326844,0.599279,0.968038,0.380392,0.403403,0.674712,0.984784,0.505882,0.499703,0.745519,1,0.631373,0.615055,0.813983,1,0.756863,0.74405,0.879228,1,0.882353,0.877909,0.941913,1,1,1,1,0.999996]},{"ColorSpace":"Lab","Name":"BLUE-WHITE","RGBPoints":[-1,0,0,0,-0.87451,0,0,0.082353,-0.74902,0,0,0.168627,-0.623529,0,0,0.254902,-0.498039,0,0,0.337255,-0.372549,0,0,0.423529,-0.247059,0,0,0.509804,-0.121569,0,0.101961,0.592157,0.00392157,0,0.203922,0.678431,0.129412,0,0.301961,0.764706,0.254902,0,0.403922,0.85098,0.380392,0,0.505882,0.933333,0.505882,0,0.603922,1,0.631373,0.254902,0.705882,1,0.756863,0.509804,0.807843,1,0.882353,0.764706,0.905882,1,1,1,1,1]},{"ColorSpace":"Lab","Name":"erdc_purple_BW","RGBPoints":[-1,4.264e-8,0,6.20844e-7,-0.87451,0.100579,0.0593111,0.145666,-0.74902,0.167794,0.0889224,0.254953,-0.623529,0.231446,0.123339,0.360511,-0.498039,0.296699,0.163027,0.461278,-0.372549,0.363211,0.209286,0.55306,-0.247059,0.431136,0.260776,0.637195,-0.121569,0.498202,0.320012,0.705799,0.00392157,0.567456,0.380459,0.778091,0.129412,0.629381,0.445284,0.8448,0.254902,0.688373,0.517374,0.895694,0.380392,0.74891,0.590906,0.93976,0.505882,0.805017,0.667956,0.977626,0.631373,0.850914,0.752618,0.992396,0.756863,0.89724,0.838454,0.994093,0.882353,0.948461,0.922603,0.994449,1,1,1,0.999967]},{"ColorSpace":"Lab","Name":"erdc_magenta_BW","RGBPoints":[-1,0,0,0.0000254023,-0.87451,0.128696,0.0456782,0.11635,-0.74902,0.228133,0.0476299,0.201452,-0.623529,0.327273,0.0374065,0.282107,-0.498039,0.420953,0.0408166,0.35709,-0.372549,0.511562,0.0642203,0.430511,-0.247059,0.599552,0.102686,0.504257,-0.121569,0.684646,0.150536,0.579429,0.00392157,0.765817,0.205978,0.656062,0.129412,0.839176,0.27229,0.731807,0.254902,0.89536,0.357594,0.797309,0.380392,0.930238,0.457825,0.846984,0.505882,0.945921,0.564536,0.880571,0.631373,0.948995,0.670753,0.902279,0.756863,0.947124,0.772819,0.918171,0.882353,0.947265,0.869424,0.934352,1,0.954719,0.95475,0.954726]},{"ColorSpace":"Lab","Name":"magenta","RGBPoints":[-1,0,0,0,-0.87451,0.364706,0,0.152941,-0.74902,0.470588,0,0.254902,-0.623529,0.572549,0,0.34902,-0.498039,0.670588,0,0.443137,-0.372549,0.772549,0,0.537255,-0.247059,0.870588,0,0.627451,-0.121569,0.964706,0,0.717647,0.00392157,1,0.0784314,0.772549,0.129412,1,0.207843,0.858824,0.254902,1,0.32549,0.941176,0.380392,1,0.45098,1,0.505882,1,0.560784,1,0.631373,1,0.662745,1,0.756863,1,0.760784,1,0.882353,1,0.870588,1,1,1,1,1]},{"ColorSpace":"Lab","Name":"RED-PURPLE","RGBPoints":[-1,0,0,0,-0.87451,0.188235,0,0.007843,-0.74902,0.345098,0,0.035294,-0.623529,0.439216,0,0.098039,-0.498039,0.533333,0,0.152941,-0.372549,0.627451,0.015686,0.211765,-0.247059,0.721569,0.031373,0.266667,-0.121569,0.8,0.047059,0.329412,0.00392157,0.862745,0.047059,0.403922,0.129412,0.941176,0.062745,0.466667,0.254902,0.988235,0.078431,0.54902,0.380392,0.988235,0.141176,0.643137,0.505882,0.988235,0.25098,0.729412,0.631373,0.988235,0.376471,0.811765,0.756863,0.988235,0.54902,0.886275,0.882353,0.988235,0.752941,0.952941,1,0.996078,0.996078,0.996078]},{"ColorSpace":"Lab","Name":"erdc_red_BW","RGBPoints":[-1,0,0,0,-0.87451,0.147204,0.0480135,0.0401815,-0.74902,0.253411,0.0617478,0.0301333,-0.623529,0.356059,0.0746331,0.0446897,-0.498039,0.457731,0.0934935,0.0636931,-0.372549,0.557199,0.122714,0.0860013,-0.247059,0.665179,0.144238,0.105585,-0.121569,0.763833,0.187056,0.138326,0.00392157,0.847035,0.254558,0.189407,0.129412,0.905663,0.345937,0.258215,0.254902,0.941431,0.447111,0.346277,0.380392,0.962608,0.546927,0.457571,0.505882,0.987833,0.637276,0.569944,0.631373,0.994202,0.732176,0.687958,0.756863,0.993304,0.826268,0.800567,0.882353,0.994413,0.917205,0.906393,1,1,1,0.999979]},{"ColorSpace":"Lab","Name":"RED_TEMPERATURE","RGBPoints":[-1,0,0,0,-0.87451,0.090196,0,0,-0.74902,0.180392,0,0,-0.623529,0.270588,0,0,-0.498039,0.360784,0,0,-0.372549,0.45098,0,0,-0.247059,0.545098,0,0,-0.121569,0.635294,0,0,0.00392157,0.72549,0.058824,0,0.129412,0.815686,0.176471,0,0.254902,0.905882,0.294118,0,0.380392,1,0.411765,0,0.505882,1,0.533333,0.027451,0.631373,1,0.65098,0.27451,0.756863,1,0.768627,0.521569,0.882353,1,0.886275,0.768627,1,1,1,1]},{"ColorSpace":"Lab","Name":"erdc_orange_BW","RGBPoints":[-1,0,0,0.0000253806,-0.87451,0.135871,0.0593824,0,-0.74902,0.224328,0.0907216,0,-0.623529,0.318083,0.119647,0,-0.498039,0.414443,0.150246,0,-0.372549,0.511077,0.184884,0,-0.247059,0.605501,0.226033,0,-0.121569,0.695274,0.275491,0,0.00392157,0.777826,0.334445,0,0.129412,0.851498,0.402441,0,0.254902,0.915899,0.47759,0.000602975,0.380392,0.971984,0.557882,0.0361443,0.505882,1,0.641287,0.135967,0.631373,1,0.725198,0.27997,0.756863,1,0.808205,0.438135,0.882353,1,0.89306,0.587036,1,1,0.977928,0.721599]},{"ColorSpace":"Lab","Name":"heated_object","RGBPoints":[-1,0,0,0,-0.87451,0.34902,0.0862745,0,-0.74902,0.45098,0.172549,0,-0.623529,0.52549,0.231373,0,-0.498039,0.580392,0.278431,0,-0.372549,0.623529,0.313725,0,-0.247059,0.670588,0.352941,0,-0.121569,0.717647,0.392157,0,0.00392157,0.772549,0.439216,0,0.129412,0.839216,0.494118,0,0.254902,0.901961,0.541176,0,0.380392,0.968627,0.6,0,0.505882,1,0.658824,0,0.631373,1,0.721569,0,0.756863,1,0.827451,0.298039,0.882353,1,0.976471,0.72549,1,1,1,1]},{"ColorSpace":"Lab","Name":"erdc_gold_BW","RGBPoints":[-1,0,0,0.0000190933,-0.87451,0.128363,0.0636265,0,-0.74902,0.193795,0.111057,0,-0.623529,0.25976,0.15987,0,-0.498039,0.328546,0.210589,0,-0.372549,0.399726,0.26332,0,-0.247059,0.472969,0.318261,0,-0.121569,0.546245,0.375827,0,0.00392157,0.61745,0.436719,0,0.129412,0.685545,0.501113,0,0.254902,0.749578,0.568799,0,0.380392,0.80962,0.6394,0,0.505882,0.865572,0.712699,0.10257,0.631373,0.917709,0.787569,0.233665,0.756863,0.966914,0.863138,0.369608,0.882353,1,0.939405,0.496104,1,0.999225,1,0.612275]},{"ColorSpace":"Lab","Name":"erdc_brown_BW","RGBPoints":[-1,3.3216e-7,0,0.00000483629,-0.87451,0.14693,0.0518172,0,-0.74902,0.225806,0.0814996,0,-0.623529,0.301681,0.111452,0,-0.498039,0.370487,0.150664,0,-0.372549,0.43108,0.199477,0,-0.247059,0.4849,0.255107,0,-0.121569,0.536798,0.313486,0,0.00392157,0.59286,0.371167,0,0.129412,0.653119,0.428135,0,0.254902,0.714589,0.485917,0.0379541,0.380392,0.774667,0.54565,0.116634,0.505882,0.831222,0.608047,0.183895,0.631373,0.880305,0.674199,0.260298,0.756863,0.922314,0.742472,0.367086,0.882353,0.959408,0.811222,0.497258,1,0.993548,0.875183,0.622093]},{"ColorSpace":"Lab","Name":"copper_Matlab","RGBPoints":[-1,0,0,0,-0.87451,0.0784314,0.0501961,0.0313725,-0.74902,0.156863,0.100392,0.0627451,-0.623529,0.235294,0.150588,0.0941176,-0.498039,0.313725,0.200784,0.12549,-0.372549,0.392157,0.25098,0.156863,-0.247059,0.470588,0.301176,0.188235,-0.121569,0.54902,0.351373,0.219608,0.00392157,0.627451,0.401569,0.25098,0.129412,0.705882,0.451765,0.282353,0.254902,0.784314,0.501961,0.313725,0.380392,0.862745,0.552157,0.345098,0.505882,0.941176,0.602353,0.376471,0.631373,1,0.652549,0.407843,0.756863,1,0.702745,0.439216,0.882353,1,0.752941,0.470588,1,1,0.8,0.5]},{"ColorSpace":"Lab","Name":"pink_Matlab","RGBPoints":[-1,0,0,0,-0.87451,0.312416,0.204524,0.204524,-0.74902,0.441822,0.289241,0.289241,-0.623529,0.54112,0.354246,0.354246,-0.498039,0.624831,0.409048,0.409048,-0.372549,0.698582,0.45733,0.45733,-0.247059,0.764404,0.502282,0.500979,-0.121569,0.791292,0.591516,0.54112,0.00392157,0.817297,0.66895,0.578481,0.129412,0.842499,0.738308,0.613572,0.254902,0.866968,0.801687,0.646762,0.380392,0.890766,0.86041,0.678329,0.505882,0.913944,0.913944,0.711254,0.631373,0.936549,0.936549,0.79459,0.756863,0.958621,0.958621,0.869979,0.882353,0.980196,0.980196,0.939336,1,1,1,1]},{"ColorSpace":"Lab","Name":"bone_Matlab","RGBPoints":[-1,0,0,0,-0.87451,0.054902,0.054902,0.075817,-0.74902,0.109804,0.109804,0.151634,-0.623529,0.164706,0.164706,0.227451,-0.498039,0.219608,0.219608,0.303268,-0.372549,0.27451,0.27451,0.379085,-0.247059,0.329412,0.329902,0.454412,-0.121569,0.384314,0.405719,0.509314,0.00392157,0.439216,0.481536,0.564216,0.129412,0.494118,0.557353,0.619118,0.254902,0.54902,0.63317,0.67402,0.380392,0.603922,0.708987,0.728922,0.505882,0.660294,0.783824,0.783824,0.631373,0.746569,0.838725,0.838725,0.756863,0.832843,0.893627,0.893627,0.882353,0.919118,0.948529,0.948529,1,1,1,1]},{"ColorSpace":"Lab","Name":"gray_Matlab","RGBPoints":[-1,0,0,0,-0.87451,0.0627451,0.0627451,0.0627451,-0.74902,0.12549,0.12549,0.12549,-0.623529,0.188235,0.188235,0.188235,-0.498039,0.25098,0.25098,0.25098,-0.372549,0.313725,0.313725,0.313725,-0.247059,0.376471,0.376471,0.376471,-0.121569,0.439216,0.439216,0.439216,0.00392157,0.501961,0.501961,0.501961,0.129412,0.564706,0.564706,0.564706,0.254902,0.627451,0.627451,0.627451,0.380392,0.690196,0.690196,0.690196,0.505882,0.752941,0.752941,0.752941,0.631373,0.815686,0.815686,0.815686,0.756863,0.878431,0.878431,0.878431,0.882353,0.941176,0.941176,0.941176,1,1,1,1]},{"ColorSpace":"Lab","Name":"Purples","RGBPoints":[-1,0.247059,0,0.490196,-0.87451,0.288397,0.07677,0.525629,-0.74902,0.32975,0.153587,0.561092,-0.623529,0.373057,0.236263,0.600461,-0.498039,0.416363,0.319,0.639923,-0.372549,0.459669,0.405613,0.685198,-0.247059,0.503345,0.491534,0.730058,-0.121569,0.562399,0.54862,0.757616,0.00392157,0.621453,0.606075,0.785544,0.129412,0.680508,0.674971,0.824914,0.254902,0.739562,0.743406,0.863899,0.380392,0.798616,0.800492,0.893426,0.505882,0.85684,0.856655,0.922491,0.631373,0.898178,0.894056,0.942176,0.756863,0.938654,0.930919,0.961646,0.882353,0.964245,0.958478,0.977393,1,0.988235,0.984314,0.992157]},{"ColorSpace":"Lab","Name":"Blues","RGBPoints":[-1,0.031373,0.188235,0.419608,-0.87451,0.031373,0.253195,0.516063,-0.74902,0.031757,0.318139,0.612149,-0.623529,0.080969,0.38113,0.661361,-0.498039,0.130427,0.444152,0.710327,-0.372549,0.195386,0.509112,0.743791,-0.247059,0.260715,0.573841,0.777209,-0.121569,0.341423,0.628958,0.808704,0.00392157,0.422745,0.684075,0.839892,0.129412,0.523137,0.739193,0.861546,0.254902,0.622684,0.793464,0.883429,0.380392,0.701423,0.826928,0.910988,0.505882,0.778685,0.8603,0.937993,0.631373,0.825928,0.891795,0.953741,0.756863,0.87328,0.923291,0.969489,0.882353,0.922491,0.954787,0.985236,1,0.968627,0.984314,1]},{"ColorSpace":"Lab","Name":"Greens","RGBPoints":[-1,0,0.266667,0.105882,-0.87451,0,0.347374,0.139346,-0.74902,0.000538,0.427912,0.172933,-0.623529,0.069435,0.486967,0.222145,-0.498039,0.138178,0.546082,0.271326,-0.372549,0.197232,0.609073,0.31857,-0.247059,0.257255,0.671742,0.365859,-0.121569,0.357647,0.720953,0.415071,0.00392157,0.45767,0.769919,0.465021,0.129412,0.546251,0.811257,0.537855,0.254902,0.634295,0.852211,0.610688,0.380392,0.709097,0.883706,0.683522,0.505882,0.78316,0.914833,0.755894,0.631373,0.842215,0.938454,0.818885,0.756863,0.899977,0.961538,0.880692,0.882353,0.935409,0.975317,0.92203,1,0.968627,0.988235,0.960784]},{"ColorSpace":"Lab","Name":"PuBu","RGBPoints":[-1,0.301961,0,0.294118,-0.87451,0.404321,0.029527,0.390573,-0.74902,0.50599,0.059592,0.486782,-0.623529,0.519769,0.158016,0.551742,-0.498039,0.533456,0.256194,0.616301,-0.372549,0.54133,0.33887,0.655671,-0.247059,0.54902,0.421592,0.695087,-0.121569,0.54902,0.506236,0.736424,0.00392157,0.550127,0.590573,0.777701,0.129412,0.585559,0.665375,0.81707,0.254902,0.622145,0.739023,0.855825,0.380392,0.687105,0.784298,0.879446,0.505882,0.752065,0.829758,0.903253,0.631373,0.817024,0.87897,0.930811,0.756863,0.880907,0.927213,0.957832,0.882353,0.926182,0.958708,0.975548,1,0.968627,0.988235,0.992157]},{"ColorSpace":"Lab","Name":"BuPu","RGBPoints":[-1,0.007843,0.219608,0.345098,-0.87451,0.01178,0.286536,0.449427,-0.74902,0.015702,0.35328,0.553479,-0.623529,0.01767,0.396586,0.622376,-0.498039,0.021115,0.4402,0.690688,-0.372549,0.11757,0.503191,0.722184,-0.247059,0.214625,0.565859,0.753633,-0.121569,0.336671,0.615071,0.78316,0.00392157,0.457978,0.663975,0.812503,0.129412,0.556401,0.703345,0.836125,0.254902,0.65421,0.742714,0.859669,0.380392,0.736886,0.782084,0.881323,0.505882,0.81827,0.821638,0.903068,0.631373,0.873387,0.864944,0.92669,0.756863,0.927536,0.907605,0.949988,0.882353,0.964937,0.9391,0.967705,1,1,0.968627,0.984314]},{"ColorSpace":"Lab","Name":"BuGn","RGBPoints":[-1,0.031373,0.25098,0.505882,-0.87451,0.031373,0.329719,0.590527,-0.74902,0.031911,0.408397,0.674787,-0.623529,0.100807,0.479262,0.710219,-0.498039,0.169704,0.550219,0.745744,-0.372549,0.238601,0.62699,0.787082,-0.247059,0.307958,0.703114,0.826759,-0.121569,0.39654,0.752326,0.797232,0.00392157,0.485121,0.801046,0.767705,0.129412,0.573702,0.83451,0.738178,0.254902,0.661592,0.867743,0.711034,0.380392,0.732457,0.895302,0.74253,0.505882,0.801845,0.922307,0.774579,0.631373,0.841215,0.938055,0.817885,0.756863,0.880907,0.95391,0.861084,0.882353,0.926182,0.971626,0.902422,1,0.968627,0.988235,0.941176]},{"ColorSpace":"Lab","Name":"GnBu","RGBPoints":[-1,0,0.266667,0.105882,-0.87451,0,0.347374,0.139346,-0.74902,0.000538,0.427912,0.172933,-0.623529,0.069435,0.486967,0.222145,-0.498039,0.138178,0.546175,0.272095,-0.372549,0.197232,0.615071,0.368551,-0.247059,0.256609,0.683276,0.464867,-0.121569,0.329443,0.722645,0.555417,0.00392157,0.403137,0.762138,0.645413,0.129412,0.503529,0.805444,0.718247,0.254902,0.603922,0.848597,0.790465,0.380392,0.704314,0.887966,0.847551,0.505882,0.802307,0.926321,0.903714,0.631373,0.851519,0.944037,0.941115,0.756863,0.899977,0.961538,0.976901,0.882353,0.935409,0.975317,0.984775,1,0.968627,0.988235,0.992157]},{"ColorSpace":"Lab","Name":"GnBuPu","RGBPoints":[-1,0.003922,0.27451,0.211765,-0.87451,0.003922,0.349312,0.280661,-0.74902,0.003937,0.423852,0.349773,-0.623529,0.005905,0.46519,0.446228,-0.498039,0.009443,0.506344,0.542837,-0.372549,0.111803,0.535871,0.649135,-0.247059,0.214025,0.565859,0.753633,-0.121569,0.310481,0.615071,0.78316,0.00392157,0.407797,0.663975,0.812503,0.129412,0.531811,0.703345,0.836125,0.254902,0.65421,0.742714,0.859669,0.380392,0.736886,0.782084,0.881323,0.505882,0.81827,0.821176,0.902884,0.631373,0.873387,0.854641,0.922568,0.756863,0.927536,0.888535,0.942361,0.882353,0.964937,0.929873,0.964014,1,1,0.968627,0.984314]},{"ColorSpace":"Lab","Name":"BuGnYl","RGBPoints":[-1,0.031373,0.113725,0.345098,-0.87451,0.088458,0.159,0.463206,-0.74902,0.145052,0.204567,0.5807,-0.623529,0.139146,0.287243,0.620069,-0.498039,0.13318,0.370196,0.659562,-0.372549,0.123337,0.470588,0.706805,-0.247059,0.115386,0.570335,0.753126,-0.121569,0.186251,0.643168,0.761,0.00392157,0.258716,0.71514,0.768074,0.129412,0.380761,0.760415,0.750358,0.254902,0.503576,0.806075,0.732795,0.380392,0.645306,0.861192,0.719016,0.505882,0.783899,0.91511,0.705606,0.631373,0.858701,0.944637,0.6997,0.756863,0.931349,0.973303,0.698424,0.882353,0.966782,0.987082,0.777163,1,1,1,0.85098]},{"ColorSpace":"Lab","Name":"PuRd","RGBPoints":[-1,0.286275,0,0.415686,-0.87451,0.38273,0.001968,0.441276,-0.74902,0.479231,0.003922,0.466774,-0.623529,0.581592,0.003922,0.480554,-0.498039,0.683799,0.00549,0.494887,-0.372549,0.776317,0.105882,0.544098,-0.247059,0.867866,0.206321,0.592618,-0.121569,0.919047,0.308681,0.612303,0.00392157,0.968812,0.411226,0.632603,0.129412,0.974717,0.519493,0.671972,0.254902,0.980546,0.626451,0.71065,0.380392,0.984483,0.701253,0.732303,0.505882,0.988328,0.77504,0.755617,0.631373,0.990296,0.828189,0.812703,0.756863,0.992372,0.880907,0.869035,0.882353,0.996309,0.926182,0.912341,1,1,0.968627,0.952941]},{"ColorSpace":"Lab","Name":"RdPu","RGBPoints":[-1,0.403922,0,0.121569,-0.87451,0.500377,0,0.192434,-0.74902,0.596909,0.000277,0.263037,-0.623529,0.703206,0.035709,0.300438,-0.498039,0.808612,0.071296,0.338854,-0.372549,0.857824,0.116571,0.441215,-0.247059,0.905513,0.163552,0.54293,-0.121569,0.889765,0.281661,0.617732,0.00392157,0.873156,0.39897,0.691611,0.129412,0.82985,0.491488,0.736886,0.254902,0.789081,0.583237,0.781853,0.380392,0.810734,0.656071,0.819254,0.505882,0.833126,0.729181,0.85684,0.631373,0.870527,0.80792,0.898178,0.756863,0.907605,0.884398,0.938331,0.882353,0.9391,0.921799,0.958016,1,0.968627,0.956863,0.976471]},{"ColorSpace":"Lab","Name":"Oranges","RGBPoints":[-1,0.498039,0.152941,0.015686,-0.87451,0.57481,0.182468,0.013718,-0.74902,0.651765,0.212042,0.011734,-0.623529,0.752157,0.247474,0.007797,-0.498039,0.851719,0.283368,0.004475,-0.372549,0.898962,0.348328,0.039908,-0.247059,0.945652,0.413426,0.076401,-0.121569,0.969273,0.484291,0.157109,0.00392157,0.992157,0.554971,0.238185,0.129412,0.992157,0.619931,0.330704,0.254902,0.992157,0.684967,0.423837,0.380392,0.992157,0.751895,0.532103,0.505882,0.992249,0.817716,0.639354,0.631373,0.994218,0.861023,0.725967,0.756863,0.996186,0.903576,0.810965,0.882353,0.998155,0.933103,0.868051,1,1,0.960784,0.921569]},{"ColorSpace":"Lab","Name":"Reds","RGBPoints":[-1,0.403922,0,0.05098,-0.87451,0.525967,0.029527,0.066728,-0.74902,0.647643,0.058962,0.082476,-0.623529,0.722445,0.076678,0.098224,-0.498039,0.797186,0.095194,0.114187,-0.372549,0.868051,0.164091,0.143714,-0.247059,0.937809,0.233541,0.173933,-0.121569,0.96143,0.326059,0.232987,0.00392157,0.984375,0.418147,0.292657,0.129412,0.986344,0.496886,0.371396,0.254902,0.988235,0.575702,0.450673,0.380392,0.988235,0.656409,0.543191,0.505882,0.98842,0.736747,0.635894,0.631373,0.992357,0.809581,0.732349,0.756863,0.996186,0.880692,0.826759,0.882353,0.998155,0.92203,0.885813,1,1,0.960784,0.941176]},{"ColorSpace":"Lab","Name":"RdOr","RGBPoints":[-1,0.498039,0,0,-0.87451,0.6004,0,0,-0.74902,0.702514,0.000738,0.000477,-0.623529,0.773379,0.095225,0.061499,-0.498039,0.843875,0.189865,0.12283,-0.372549,0.891119,0.294195,0.203537,-0.247059,0.937855,0.397924,0.283137,-0.121569,0.963445,0.476663,0.316601,0.00392157,0.988297,0.555771,0.351665,0.129412,0.990265,0.646321,0.436309,0.254902,0.992157,0.735256,0.519646,0.380392,0.992157,0.784468,0.570827,0.505882,0.992249,0.833218,0.623483,0.631373,0.994218,0.872587,0.706159,0.756863,0.996186,0.911419,0.788189,0.882353,0.998155,0.940946,0.859054,1,1,0.968627,0.92549]},{"ColorSpace":"Lab","Name":"BrOrYl","RGBPoints":[-1,0.4,0.145098,0.023529,-0.87451,0.500392,0.174625,0.019592,-0.74902,0.600784,0.204291,0.015656,-0.623529,0.701176,0.251534,0.011719,-0.498039,0.800984,0.299146,0.008397,-0.372549,0.863975,0.370012,0.043829,-0.247059,0.926321,0.441107,0.0794,-0.121569,0.961753,0.521815,0.120738,0.00392157,0.996078,0.602645,0.163122,0.129412,0.996078,0.68729,0.237924,0.254902,0.996078,0.771011,0.314879,0.380392,0.996078,0.832034,0.444798,0.505882,0.996171,0.892042,0.572595,0.631373,0.998139,0.931411,0.65724,0.756863,1,0.969489,0.741669,0.882353,1,0.985236,0.822376,1,1,1,0.898039]},{"ColorSpace":"Lab","Name":"RdOrYl","RGBPoints":[-1,0.501961,0,0.14902,-0.87451,0.622038,0,0.14902,-0.74902,0.741761,0.0004,0.148866,-0.623529,0.816563,0.05158,0.129181,-0.498039,0.890965,0.10356,0.110235,-0.372549,0.940177,0.205921,0.137793,-0.247059,0.988281,0.308789,0.165536,-0.121569,0.99025,0.432803,0.200969,0.00392157,0.992218,0.555217,0.236278,0.129412,0.994187,0.628051,0.267774,0.254902,0.996078,0.701038,0.301269,0.380392,0.996078,0.777809,0.383945,0.505882,0.996171,0.852826,0.466621,0.631373,0.998139,0.892195,0.549296,0.756863,1,0.931349,0.632188,0.882353,1,0.966782,0.7188,1,1,1,0.8]},{"ColorSpace":"Lab","Name":"CIELab_blue2red","RGBPoints":[-1,0,0.6,0.74902,1,0.76863,0.46667,0.34118]},{"ColorSpace":"Lab","Name":"blue2yellow","RGBPoints":[-1,0,0,1,0,0.5,0.5,0.5,1,1,1,0]},{"ColorSpace":"Lab","Name":"erdc_blue2gold","RGBPoints":[-1,0.175119,0.0438468,1,-0.874016,0.22383,0.159771,0.94557,-0.748031,0.27254,0.233611,0.891216,-0.622047,0.321251,0.296526,0.836857,-0.496063,0.369962,0.354296,0.782359,-0.370079,0.418672,0.409139,0.72754,-0.244094,0.467383,0.462152,0.672148,-0.11811,0.51609,0.51396,0.615825,0.00787402,0.572863,0.55452,0.559172,0.133858,0.630269,0.593822,0.517729,0.259843,0.689588,0.624668,0.47446,0.385827,0.745394,0.656113,0.428638,0.511811,0.798624,0.688104,0.379105,0.637795,0.849926,0.720593,0.323834,0.76378,0.899765,0.753543,0.258657,0.889764,0.948487,0.78692,0.171778,1,0.990413,0.816451,0.00729848]},{"ColorSpace":"Lab","Name":"erdc_blue2yellow","RGBPoints":[-1,0.0830122,0,0.495617,-0.87451,0.141973,0.0551288,0.57363,-0.74902,0.193048,0.110258,0.604561,-0.623529,0.234231,0.165386,0.57643,-0.498039,0.275413,0.220515,0.548299,-0.372549,0.316596,0.275644,0.520169,-0.247059,0.357778,0.330773,0.492038,-0.121569,0.398961,0.385901,0.463908,0.00392157,0.449929,0.438487,0.426815,0.129412,0.511572,0.488299,0.379944,0.254902,0.581222,0.53603,0.325741,0.380392,0.650871,0.583761,0.271538,0.505882,0.720521,0.631493,0.217335,0.631373,0.79017,0.679224,0.163132,0.756863,0.85982,0.726955,0.108929,0.882353,0.910254,0.774159,0.14112,1,0.927513,0.81759,0.306289]},{"ColorSpace":"Lab","Name":"erdc_cyan2orange","RGBPoints":[-1,0.0471513,0.213874,0.414329,-0.87451,0.0674702,0.256648,0.439027,-0.74902,0.0959957,0.299331,0.462089,-0.623529,0.132428,0.341872,0.483212,-0.498039,0.188743,0.38277,0.500597,-0.372549,0.268511,0.420229,0.512179,-0.247059,0.352945,0.455602,0.519101,-0.121569,0.43893,0.489368,0.521538,0.00392157,0.522445,0.522495,0.522436,0.129412,0.600089,0.555682,0.53205,0.254902,0.67988,0.587981,0.539163,0.380392,0.761011,0.619586,0.544439,0.505882,0.84278,0.650741,0.548567,0.631373,0.910713,0.687347,0.557822,0.756863,0.952232,0.734972,0.577775,0.882353,0.975642,0.789858,0.604868,1,0.990752,0.843643,0.632857]},{"ColorSpace":"Lab","Name":"erdc_purple2green","RGBPoints":[-1,0.235006,0.0483128,0.530899,-0.87451,0.302968,0.108419,0.552391,-0.74902,0.360241,0.166059,0.569502,-0.623529,0.406746,0.226782,0.579373,-0.498039,0.444073,0.28964,0.582094,-0.372549,0.473648,0.353774,0.577947,-0.247059,0.497636,0.418154,0.567911,-0.121569,0.519086,0.481741,0.553968,0.00392157,0.542884,0.542914,0.542875,0.129412,0.566303,0.603989,0.527499,0.254902,0.595218,0.662965,0.516857,0.380392,0.628641,0.720701,0.510673,0.505882,0.665373,0.777849,0.508165,0.631373,0.704182,0.834921,0.508303,0.756863,0.743846,0.892328,0.50999,0.882353,0.783158,0.950422,0.512181,1,0.818617,1,0.513888]},{"ColorSpace":"Lab","Name":"erdc_purple2green_dark","RGBPoints":[-1,0.107656,0,0.428682,-0.87451,0.1924,0,0.449799,-0.74902,0.255118,0.0648939,0.466726,-0.623529,0.304256,0.133066,0.476703,-0.498039,0.343202,0.19716,0.479793,-0.372549,0.373876,0.260353,0.476241,-0.247059,0.398497,0.322872,0.466953,-0.121569,0.420016,0.384252,0.453785,0.00392157,0.44319,0.443216,0.443186,0.129412,0.465553,0.502139,0.428233,0.254902,0.492959,0.559151,0.417591,0.380392,0.524654,0.615092,0.411016,0.505882,0.55959,0.670583,0.40779,0.631373,0.596614,0.726102,0.406948,0.756863,0.634544,0.782032,0.407439,0.882353,0.672183,0.838703,0.408237,1,0.706131,0.892759,0.408452]},{"ColorSpace":"Lab","Name":"coolwarm","RGBPoints":[-1,0.229806,0.298718,0.753683,-0.875,0.303869,0.406535,0.844959,-0.75,0.383013,0.509419,0.917388,-0.625,0.466667,0.604563,0.968155,-0.5,0.552953,0.688929,0.995376,-0.375,0.639176,0.7596,0.998151,-0.25,0.722193,0.813953,0.976575,-0.125,0.798692,0.849786,0.931689,0,0.865395,0.86541,0.865396,0.125,0.924128,0.827385,0.774508,0.25,0.958853,0.769768,0.678008,0.375,0.969954,0.694267,0.579375,0.5,0.958003,0.602842,0.481776,0.625,0.923945,0.497309,0.38797,0.75,0.869187,0.378313,0.300267,0.875,0.795632,0.241284,0.220526,1,0.705673,0.0155562,0.150233]},{"ColorSpace":"Lab","Name":"BuRd","RGBPoints":[-1,0.019608,0.188235,0.380392,-0.87451,0.088504,0.321107,0.564937,-0.74902,0.163399,0.444983,0.697501,-0.623529,0.247059,0.555709,0.754095,-0.498039,0.420684,0.676432,0.818685,-0.372549,0.606459,0.789773,0.880277,-0.247059,0.761476,0.868512,0.924567,-0.121569,0.878047,0.925721,0.951942,0.00392157,0.969089,0.966474,0.964937,0.129412,0.983852,0.897578,0.846828,0.254902,0.982468,0.800692,0.706113,0.380392,0.960323,0.66782,0.536332,0.505882,0.894579,0.503806,0.399769,0.631373,0.81707,0.33218,0.281046,0.756863,0.728489,0.155017,0.197386,0.882353,0.576932,0.055363,0.14925,1,0.403922,0,0.121569]},{"ColorSpace":"Lab","Name":"Spectral_lowBlue","RGBPoints":[-1,0.368627,0.309804,0.635294,-0.87451,0.260361,0.450058,0.70173,-0.74902,0.248058,0.591311,0.717186,-0.623529,0.376009,0.734025,0.658132,-0.498039,0.537947,0.814764,0.64506,-0.372549,0.702345,0.879585,0.636678,-0.247059,0.84752,0.938639,0.607151,-0.121569,0.940408,0.976163,0.656055,0.00392157,0.999923,0.997616,0.745021,0.129412,0.997463,0.921338,0.61707,0.254902,0.995002,0.824606,0.499885,0.380392,0.992541,0.701576,0.39654,0.505882,0.973472,0.547405,0.318108,0.631373,0.937793,0.398539,0.270127,0.756863,0.861515,0.282891,0.299654,0.882353,0.746482,0.144637,0.288812,1,0.619608,0.003922,0.258824]},{"ColorSpace":"Lab","Name":"GnRP","RGBPoints":[-1,0,0.266667,0.105882,-0.87451,0.066436,0.394617,0.174779,-0.74902,0.168858,0.524567,0.25767,-0.623529,0.323875,0.657439,0.361015,-0.498039,0.504883,0.772318,0.506344,-0.372549,0.678431,0.870127,0.654902,-0.247059,0.803922,0.921799,0.780392,-0.121569,0.897116,0.951942,0.882814,0.00392157,0.967397,0.965936,0.967474,0.129412,0.928028,0.879815,0.930565,0.254902,0.866052,0.780777,0.882891,0.380392,0.77501,0.665129,0.821376,0.505882,0.675663,0.537024,0.737024,0.631373,0.57847,0.396155,0.645982,0.756863,0.492349,0.223914,0.547559,0.882353,0.375548,0.096886,0.423299,1,0.25098,0,0.294118]},{"ColorSpace":"Lab","Name":"GYPi","RGBPoints":[-1,0.152941,0.392157,0.098039,-0.87451,0.246444,0.505344,0.117724,-0.74902,0.351942,0.614533,0.161399,-0.623529,0.474971,0.717878,0.240138,-0.498039,0.611995,0.811226,0.392849,-0.372549,0.746328,0.893118,0.565321,-0.247059,0.859516,0.94233,0.747405,-0.121569,0.928105,0.96386,0.875663,0.00392157,0.969089,0.966859,0.968012,0.129412,0.983852,0.910265,0.948328,0.254902,0.979239,0.833218,0.914648,0.380392,0.949712,0.729873,0.862976,0.505882,0.905652,0.58293,0.763552,0.631373,0.85521,0.410073,0.652211,0.756863,0.793695,0.183699,0.531642,0.882353,0.683737,0.063899,0.420761,1,0.556863,0.003922,0.321569]},{"ColorSpace":"Lab","Name":"GnYlRd","RGBPoints":[-1,0,0.407843,0.215686,-0.87451,0.063975,0.525952,0.277201,-0.74902,0.177932,0.633064,0.332718,-0.623529,0.364937,0.724106,0.379469,-0.498039,0.527951,0.797155,0.40223,-0.372549,0.678431,0.862822,0.433449,-0.247059,0.803922,0.916955,0.514648,-0.121569,0.909419,0.961861,0.625067,0.00392157,0.999923,0.997616,0.745021,0.129412,0.997463,0.921338,0.61707,0.254902,0.995002,0.824606,0.499885,0.380392,0.992541,0.701576,0.39654,0.505882,0.973472,0.547405,0.318108,0.631373,0.939023,0.389927,0.245521,0.756863,0.867666,0.239831,0.176624,0.882353,0.762399,0.110727,0.151326,1,0.647059,0,0.14902]},{"ColorSpace":"Lab","Name":"GBBr","RGBPoints":[-1,0,0.235294,0.188235,-0.87451,0.002461,0.338639,0.301423,-0.74902,0.055902,0.448981,0.417609,-0.623529,0.183852,0.56955,0.538178,-0.498039,0.357785,0.700115,0.660746,-0.372549,0.540177,0.819531,0.77624,-0.247059,0.714879,0.890888,0.864821,-0.121569,0.851134,0.934564,0.922645,0.00392157,0.960861,0.959785,0.95694,0.129412,0.963322,0.927797,0.83391,0.254902,0.939946,0.868897,0.68935,0.380392,0.883353,0.775394,0.517109,0.505882,0.808074,0.625836,0.324106,0.631373,0.717647,0.476355,0.15494,0.756863,0.592157,0.358247,0.06882,0.882353,0.458593,0.26436,0.031142,1,0.329412,0.188235,0.019608]},{"ColorSpace":"Lab","Name":"PuOr","RGBPoints":[-1,0.498039,0.231373,0.031373,-0.87451,0.62599,0.30273,0.026451,-0.74902,0.746943,0.387082,0.037524,-0.623529,0.85767,0.490427,0.071972,-0.498039,0.936409,0.617762,0.236371,-0.372549,0.992695,0.743099,0.43291,-0.247059,0.995156,0.841523,0.63714,-0.121569,0.985313,0.913802,0.813687,0.00392157,0.966244,0.966398,0.967705,0.129412,0.889965,0.89504,0.938178,0.254902,0.806151,0.804306,0.894656,0.380392,0.712649,0.688658,0.833141,0.505882,0.594233,0.554325,0.744637,0.631373,0.474894,0.404229,0.652364,0.756863,0.366628,0.217224,0.563783,0.882353,0.266436,0.089965,0.434833,1,0.176471,0,0.294118]},{"ColorSpace":"Lab","Name":"PRGn","RGBPoints":[-1,0.25098,0,0.294118,-0.87451,0.383852,0.103345,0.431911,-0.74902,0.497732,0.234679,0.55371,-0.623529,0.583852,0.40692,0.652134,-0.498039,0.681968,0.545175,0.742561,-0.372549,0.7807,0.672357,0.825221,-0.247059,0.871742,0.788005,0.886736,-0.121569,0.930488,0.885198,0.932872,0.00392157,0.966321,0.968089,0.965859,0.129412,0.892503,0.950865,0.877278,0.254902,0.796078,0.91857,0.772549,0.380392,0.670588,0.866897,0.647059,0.505882,0.493195,0.765398,0.496655,0.631373,0.314187,0.649135,0.354556,0.756863,0.15917,0.516263,0.251211,0.882353,0.062284,0.386621,0.170473,1,0,0.266667,0.105882]},{"ColorSpace":"Lab","Name":"PiYG","RGBPoints":[-1,0.556863,0.003922,0.321569,-0.87451,0.692195,0.067897,0.427374,-0.74902,0.797539,0.197847,0.539177,-0.623529,0.859054,0.424221,0.659746,-0.498039,0.908574,0.592618,0.770319,-0.372549,0.951557,0.736332,0.866205,-0.247059,0.981084,0.839677,0.917878,-0.121569,0.98293,0.913802,0.949558,0.00392157,0.96732,0.968474,0.965629,0.129412,0.92549,0.963552,0.869666,0.254902,0.852441,0.939254,0.736025,0.380392,0.739254,0.890042,0.553941,0.505882,0.60323,0.805536,0.382238,0.631373,0.467282,0.711419,0.235217,0.756863,0.344252,0.608074,0.156478,0.882353,0.2406,0.49827,0.116494,1,0.152941,0.392157,0.098039]},{"ColorSpace":"Lab","Name":"OrPu","RGBPoints":[-1,0.176471,0,0.294118,-0.87451,0.272434,0.095963,0.444214,-0.74902,0.373395,0.228912,0.56932,-0.623529,0.481661,0.415917,0.657901,-0.498039,0.601922,0.562937,0.750481,-0.372549,0.718493,0.695886,0.836986,-0.247059,0.811995,0.811534,0.898501,-0.121569,0.894733,0.8995,0.940023,0.00392157,0.969166,0.966859,0.963629,0.129412,0.98639,0.910265,0.803691,0.254902,0.995002,0.835371,0.624375,0.380392,0.992541,0.736947,0.420146,0.505882,0.931949,0.609458,0.224221,0.631373,0.85075,0.483968,0.069819,0.756863,0.740023,0.380623,0.035371,0.882353,0.617993,0.29827,0.026759,1,0.498039,0.231373,0.031373]},{"ColorSpace":"Lab","Name":"BrBG","RGBPoints":[-1,0.329412,0.188235,0.019608,-0.87451,0.467205,0.269435,0.031911,-0.74902,0.6,0.365629,0.074202,-0.623529,0.72549,0.483737,0.160323,-0.498039,0.812995,0.635832,0.336409,-0.372549,0.88689,0.781238,0.527874,-0.247059,0.943483,0.87474,0.700115,-0.121569,0.963168,0.929796,0.841599,0.00392157,0.957247,0.959938,0.959554,0.129412,0.84406,0.932872,0.920185,0.254902,0.70396,0.886428,0.859285,0.380392,0.529258,0.815071,0.770704,0.505882,0.346251,0.691811,0.653057,0.631373,0.175855,0.562015,0.530642,0.756863,0.047905,0.441446,0.410073,0.882353,0.002307,0.33218,0.294348,1,0,0.235294,0.188235]},{"ColorSpace":"Lab","Name":"GyRd","RGBPoints":[-1,0.101961,0.101961,0.101961,-0.87451,0.227451,0.227451,0.227451,-0.74902,0.359939,0.359939,0.359939,-0.623529,0.502653,0.502653,0.502653,-0.498039,0.631373,0.631373,0.631373,-0.372549,0.749865,0.749865,0.749865,-0.247059,0.843368,0.843368,0.843368,-0.121569,0.926105,0.926105,0.926105,0.00392157,0.999846,0.997232,0.995694,0.129412,0.994925,0.908651,0.857901,0.254902,0.982468,0.800692,0.706113,0.380392,0.960323,0.66782,0.536332,0.505882,0.894579,0.503806,0.399769,0.631373,0.81707,0.33218,0.281046,0.756863,0.728489,0.155017,0.197386,0.882353,0.576932,0.055363,0.14925,1,0.403922,0,0.121569]},{"ColorSpace":"Lab","Name":"erdc_divHi_purpleGreen","RGBPoints":[-1,0.297553,0,0.489074,-0.87451,0.40259,0.151146,0.567754,-0.74902,0.516038,0.284843,0.658231,-0.623529,0.629783,0.423646,0.750938,-0.498039,0.735198,0.563697,0.835956,-0.372549,0.82408,0.695541,0.903582,-0.247059,0.889091,0.807454,0.944862,-0.121569,0.92334,0.886917,0.951839,0.00392157,0.921045,0.921084,0.921003,0.129412,0.877324,0.907455,0.845381,0.254902,0.797649,0.849713,0.734695,0.380392,0.691646,0.75964,0.600532,0.505882,0.568981,0.649159,0.453807,0.631373,0.438945,0.529756,0.304259,0.756863,0.30973,0.412001,0.158303,0.882353,0.187078,0.305111,0.00251458,1,0.101655,0.220836,0]},{"ColorSpace":"Lab","Name":"erdc_divHi_purpleGreen_dim","RGBPoints":[-1,0.404088,0.131038,0.592767,-0.87451,0.486469,0.230957,0.651243,-0.74902,0.575165,0.339335,0.717723,-0.623529,0.662741,0.454332,0.784263,-0.498039,0.742071,0.570213,0.842918,-0.372549,0.806935,0.678992,0.886227,-0.247059,0.852219,0.771315,0.90763,-0.121569,0.873345,0.837327,0.901572,0.00392157,0.866783,0.86682,0.866745,0.129412,0.82839,0.858225,0.796812,0.254902,0.762578,0.814287,0.700202,0.380392,0.676429,0.744229,0.585735,0.505882,0.577033,0.65732,0.461526,0.631373,0.47128,0.562476,0.33476,0.756863,0.365461,0.467957,0.21076,0.882353,0.264758,0.381138,0.0878313,1,0.182591,0.312249,0]},{"ColorSpace":"Lab","Name":"erdc_divLow_icePeach","RGBPoints":[-1,0.480048,0.817441,0.998056,-0.87451,0.425898,0.726921,0.883187,-0.74902,0.366682,0.629445,0.761936,-0.623529,0.308756,0.531002,0.640217,-0.498039,0.258021,0.43705,0.523433,-0.372549,0.219244,0.352381,0.416348,-0.247059,0.195127,0.281032,0.322979,-0.121569,0.186286,0.22627,0.246525,0.00392157,0.192352,0.19236,0.192364,0.129412,0.255927,0.214469,0.191756,0.254902,0.340459,0.254426,0.206666,0.380392,0.444655,0.309315,0.234029,0.505882,0.565353,0.376004,0.270969,0.631373,0.697917,0.450748,0.314293,0.756863,0.836657,0.529064,0.360227,0.882353,0.972695,0.614884,0.413123,1,1,0.705904,0.472699]},{"ColorSpace":"Lab","Name":"erdc_divLow_purpleGreen","RGBPoints":[-1,0.956034,0.666487,0.952663,-0.87451,0.874457,0.572698,0.936352,-0.74902,0.753465,0.488253,0.909063,-0.623529,0.63309,0.413507,0.763833,-0.498039,0.514491,0.345878,0.620015,-0.372549,0.405008,0.288141,0.484376,-0.247059,0.311388,0.241986,0.363556,-0.121569,0.238722,0.209044,0.263449,0.00392157,0.192352,0.192366,0.192362,0.129412,0.200379,0.233201,0.168618,0.254902,0.230151,0.291737,0.165227,0.380392,0.279481,0.366076,0.178607,0.505882,0.344927,0.453267,0.205703,0.631373,0.421554,0.549449,0.242643,0.756863,0.503334,0.649999,0.284377,0.882353,0.583497,0.749672,0.324969,1,0.650705,0.837228,0.356264]},{"ColorSpace":"Lab","Name":"Haze_green","RGBPoints":[-1,1,0.835294,0.886275,-0.87451,0.937255,0.756863,0.870443,-0.74902,0.875817,0.666376,0.857807,-0.623529,0.778359,0.583007,0.808134,-0.498039,0.676253,0.494118,0.745098,-0.372549,0.561365,0.390123,0.682353,-0.247059,0.438344,0.262745,0.621496,-0.121569,0.321133,0.141031,0.558751,0.00392157,0.203922,0.0217865,0.495861,0.129412,0.265505,0.129412,0.433261,0.254902,0.311692,0.255338,0.37008,0.380392,0.356282,0.377342,0.310821,0.505882,0.39971,0.488889,0.258243,0.631373,0.442556,0.604357,0.205519,0.756863,0.48671,0.71968,0.152941,0.882353,0.529847,0.830356,0.100944,1,0.572549,0.933333,0.054902]},{"ColorSpace":"Lab","Name":"Haze_lime","RGBPoints":[-1,0.704034,0.784196,1,-0.87451,0.633111,0.691418,0.956078,-0.74902,0.564021,0.600606,0.912157,-0.623529,0.496827,0.51189,0.868235,-0.498039,0.43157,0.425416,0.824314,-0.372549,0.368248,0.341347,0.780392,-0.247059,0.306767,0.259855,0.736471,-0.121569,0.246862,0.181069,0.692549,0.00392157,0.191619,0.109542,0.648627,0.129412,0.257404,0.194031,0.604706,0.254902,0.321794,0.278775,0.560784,0.380392,0.387909,0.364617,0.516863,0.505882,0.456569,0.451881,0.472941,0.631373,0.527424,0.540773,0.42902,0.756863,0.599759,0.631427,0.385098,0.882353,0.673065,0.723898,0.341176,1,0.742751,0.812252,0.3]},{"ColorSpace":"RGB","Name":"Haze","RGBPoints":[-1,1,0.835294,0.996078,-0.00392157,0.023529,0.141176,0.498039,0.00392157,0.015686,0.137255,0.494118,1,0.984314,0.764706,0]},{"ColorSpace":"Lab","Name":"Haze_cyan","RGBPoints":[-1,0.956863,1,0.835294,-0.87451,0.933188,0.921714,0.760784,-0.74902,0.870588,0.803486,0.671605,-0.623529,0.807843,0.684096,0.583297,-0.498039,0.745098,0.569208,0.494118,-0.372549,0.682353,0.437763,0.390123,-0.247059,0.621496,0.288163,0.262745,-0.121569,0.558751,0.144517,0.141031,0.00392157,0.495861,0.0217865,0.0413943,0.129412,0.433261,0.137255,0.129412,0.254902,0.37008,0.263181,0.255338,0.380392,0.306318,0.381845,0.372694,0.505882,0.243137,0.503994,0.494263,0.631373,0.180392,0.629484,0.619753,0.756863,0.117647,0.754975,0.747131,0.882353,0.054902,0.876398,0.866812,1,0,0.988235,0.976471]},{"ColorSpace":"Lab","Name":"nic_Edge","RGBPoints":[-1,0.191208,0.191208,0.191208,-0.87451,0.239484,0.00545035,0.614821,-0.74902,0.220593,0.0617459,0.863547,-0.623529,0.17509,0.278988,0.97794,-0.498039,0.143526,0.576069,0.998553,-0.372549,0.166456,0.871883,0.96594,-0.247059,0.376202,0.993555,0.981833,-0.121569,0.681996,0.991297,0.999239,0.00392157,0.954172,0.952734,0.94374,0.129412,0.999735,0.99301,0.662896,0.254902,0.979399,0.991466,0.357973,0.380392,0.968771,0.854967,0.162659,0.505882,0.999245,0.556697,0.144323,0.631373,0.973959,0.26223,0.177946,0.756863,0.852358,0.0526707,0.222974,0.882353,0.593889,0.00912724,0.238855,1,0.191208,0.191208,0.191208]},{"ColorSpace":"Lab","Name":"erdc_iceFire_H","RGBPoints":[-1,4.05432e-7,0,0.00000590122,-0.87451,0,0.120401,0.302675,-0.74902,0,0.216583,0.524574,-0.623529,0.0552475,0.345025,0.6595,-0.498039,0.128047,0.492588,0.720288,-0.372549,0.188955,0.641309,0.792092,-0.247059,0.327673,0.784935,0.873434,-0.121569,0.60824,0.892164,0.935547,0.00392157,0.881371,0.912178,0.818099,0.129412,0.951407,0.835621,0.449279,0.254902,0.904481,0.690489,0,0.380392,0.85407,0.510864,0,0.505882,0.777093,0.33018,0.00088199,0.631373,0.672862,0.139087,0.00269398,0.756863,0.508815,0,0,0.882353,0.299417,0.000366289,0.000547829,1,0.0157519,0.00332021,4.55569e-8]},{"ColorSpace":"Lab","Name":"erdc_iceFire_L","RGBPoints":[-1,0.870485,0.913768,0.832905,-0.87451,0.586919,0.887865,0.934003,-0.74902,0.31583,0.776442,0.867858,-0.623529,0.18302,0.632034,0.787722,-0.498039,0.117909,0.484134,0.713825,-0.372549,0.0507239,0.335979,0.654741,-0.247059,0,0.209874,0.511832,-0.121569,0,0.114689,0.28935,0.00392157,0.0157519,0.00332021,4.55569e-8,0.129412,0.312914,0,0,0.254902,0.520865,0,0,0.380392,0.680105,0.15255,0.0025996,0.505882,0.785109,0.339479,0.000797922,0.631373,0.857354,0.522494,0,0.756863,0.910974,0.699774,0,0.882353,0.951921,0.842817,0.478545,1,0.881371,0.912178,0.818099]},{"ColorSpace":"RGB","Name":"hsv","RGBPoints":[-1,1,0,0,-0.666666,1,0,1,-0.333333,0,0,1,0,0,1,1,0.33333,0,1,0,0.66666,1,1,0,1,1,0,0]},{"ColorSpace":"Lab","Name":"hue_L60","RGBPoints":[-1,0.964784,0.400592,0.349549,-0.87451,0.964915,0.372498,0.53785,-0.74902,0.892353,0.401039,0.759569,-0.623529,0.79263,0.446956,0.903017,-0.498039,0.682208,0.49954,0.966673,-0.372549,0.56392,0.553082,0.968836,-0.247059,0.442031,0.606396,0.901601,-0.121569,0.305499,0.65701,0.765784,0.00392157,0.197251,0.687914,0.620914,0.129412,0.193882,0.701887,0.472654,0.254902,0.249866,0.706123,0.320005,0.380392,0.35132,0.697417,0.202919,0.505882,0.498097,0.669467,0.125232,0.631373,0.637477,0.626239,0.107431,0.756863,0.762115,0.56872,0.155812,0.882353,0.889434,0.481116,0.240445,1,0.964784,0.400592,0.349549]},{"ColorSpace":"Lab","Name":"erdc_rainbow_bright","RGBPoints":[-1,0.32549,0.14902,0.960784,-0.866221,0.297047,0.375586,0.963836,-0.732441,0.180302,0.536818,0.964627,-0.598662,0.1302,0.649207,0.929647,-0.464883,0.0445143,0.749654,0.855998,-0.331104,0.0271325,0.830713,0.721527,-0.197324,0.259504,0.866145,0.543555,-0.0635452,0.428364,0.890725,0.329819,0.0702341,0.568503,0.898508,0.187623,0.204013,0.738259,0.890317,0.0825461,0.337793,0.84546,0.86136,0.0147555,0.471572,0.912191,0.808018,0,0.605351,0.962848,0.710445,0,0.73913,0.999469,0.600258,0.0176284,0.87291,0.994156,0.445975,0.193912,1,0.980407,0.247105,0.262699]},{"ColorSpace":"Lab","Name":"erdc_rainbow_dark","RGBPoints":[-1,0,0,0.423499,-0.866221,0,0.119346,0.529237,-0.732441,0,0.238691,0.634976,-0.598662,0,0.346852,0.68788,-0.464883,0,0.45022,0.718141,-0.331104,0,0.553554,0.664839,-0.197324,0,0.651082,0.519303,-0.0635452,0.115841,0.72479,0.352857,0.0702341,0.326771,0.781195,0.140187,0.204013,0.522765,0.798524,0.0284624,0.337793,0.703162,0.788685,0.00885756,0.471572,0.845118,0.751133,0,0.605351,0.955734,0.690825,0,0.73913,0.995402,0.567916,0.0618524,0.87291,0.987712,0.403398,0.164851,1,0.980407,0.247105,0.262699]},{"ColorSpace":"Lab","Name":"nic_CubicL","RGBPoints":[-1,0.479965,0.0118108,0.5307,-0.87451,0.522213,0.0551282,0.706919,-0.74902,0.50839,0.237278,0.867764,-0.623529,0.451617,0.373834,0.987255,-0.498039,0.39365,0.497255,0.97506,-0.372549,0.328631,0.599639,0.891843,-0.247059,0.250043,0.690286,0.778553,-0.121569,0.249656,0.764905,0.645857,0.00392157,0.297954,0.821466,0.50449,0.129412,0.337509,0.872595,0.358447,0.254902,0.430011,0.913789,0.297079,0.380392,0.587191,0.931381,0.333353,0.505882,0.727937,0.93591,0.353742,0.631373,0.826403,0.921081,0.365066,0.756863,0.893201,0.846317,0.372662,0.882353,0.965347,0.73884,0.378506,1,0.983235,0.597451,0.366856]},{"ColorSpace":"Lab","Name":"gray_Matlab","RGBPoints":[-1,0,0,0,-0.87451,0.0627451,0.0627451,0.0627451,-0.74902,0.12549,0.12549,0.12549,-0.623529,0.188235,0.188235,0.188235,-0.498039,0.25098,0.25098,0.25098,-0.372549,0.313725,0.313725,0.313725,-0.247059,0.376471,0.376471,0.376471,-0.121569,0.439216,0.439216,0.439216,0.00392157,0.501961,0.501961,0.501961,0.129412,0.564706,0.564706,0.564706,0.254902,0.627451,0.627451,0.627451,0.380392,0.690196,0.690196,0.690196,0.505882,0.752941,0.752941,0.752941,0.631373,0.815686,0.815686,0.815686,0.756863,0.878431,0.878431,0.878431,0.882353,0.941176,0.941176,0.941176,1,1,1,1]},{"ColorSpace":"Lab","Name":"erdc_red2yellow_BW","RGBPoints":[-1,7.54296e-7,0,0.0000109827,-0.87451,0.18285,0.0264094,0,-0.74902,0.3066,0,0,-0.623529,0.422841,0,0,-0.498039,0.522945,0,0,-0.372549,0.605721,0,0,-0.247059,0.672502,0.14168,0,-0.121569,0.728167,0.244025,0,0.00392157,0.781215,0.333454,0,0.129412,0.825,0.423586,0,0.254902,0.855893,0.516793,0,0.380392,0.880491,0.608846,0,0.505882,0.910305,0.695505,0,0.631373,0.94109,0.779067,0.223528,0.756863,0.967873,0.858572,0.473521,0.882353,0.986815,0.933211,0.751583,1,1,1,0.999997]},{"ColorSpace":"Lab","Name":"erdc_blue2cyan_BW","RGBPoints":[-1,4.05298e-7,0,0.0000059012,-0.87451,0.0207526,0.0740933,0.18093,-0.74902,0,0.121033,0.30343,-0.623529,0,0.166892,0.416095,-0.498039,0,0.216768,0.524796,-0.372549,0.0164769,0.275471,0.608585,-0.247059,0.0544527,0.344824,0.659267,-0.121569,0.0880643,0.419118,0.688675,0.00392157,0.127938,0.492556,0.720256,0.129412,0.149476,0.566946,0.756918,0.254902,0.188961,0.641333,0.792122,0.380392,0.245482,0.715336,0.827609,0.505882,0.329216,0.786235,0.874761,0.631373,0.453558,0.852803,0.918466,0.756863,0.626281,0.910493,0.954,0.882353,0.82257,0.958709,0.980146,1,1,1,0.999989]},{"ColorSpace":"Lab","Name":"erdc_gold_BW","RGBPoints":[-1,0,0,0.0000190933,-0.87451,0.128363,0.0636265,0,-0.74902,0.193795,0.111057,0,-0.623529,0.25976,0.15987,0,-0.498039,0.328546,0.210589,0,-0.372549,0.399726,0.26332,0,-0.247059,0.472969,0.318261,0,-0.121569,0.546245,0.375827,0,0.00392157,0.61745,0.436719,0,0.129412,0.685545,0.501113,0,0.254902,0.749578,0.568799,0,0.380392,0.80962,0.6394,0,0.505882,0.865572,0.712699,0.10257,0.631373,0.917709,0.787569,0.233665,0.756863,0.966914,0.863138,0.369608,0.882353,1,0.939405,0.496104,1,0.999225,1,0.612275]},{"ColorSpace":"Lab","Name":"GREEN-WHITE_LINEAR","RGBPoints":[-1,0,0,0,-0.87451,0,0.062745,0,-0.74902,0,0.12549,0,-0.623529,0,0.188235,0,-0.498039,0,0.25098,0,-0.372549,0,0.313725,0,-0.247059,0,0.376471,0,-0.121569,0.094118,0.439216,0,0.00392157,0.196078,0.501961,0,0.129412,0.294118,0.564706,0,0.254902,0.396078,0.627451,0,0.380392,0.498039,0.690196,0,0.505882,0.6,0.752941,0.145098,0.631373,0.701961,0.815686,0.364706,0.756863,0.8,0.878431,0.580392,0.882353,0.901961,0.941176,0.796078,1,1,1,1]},{"ColorSpace":"Lab","Name":"Blues","RGBPoints":[-1,0.031373,0.188235,0.419608,-0.87451,0.031373,0.253195,0.516063,-0.74902,0.031757,0.318139,0.612149,-0.623529,0.080969,0.38113,0.661361,-0.498039,0.130427,0.444152,0.710327,-0.372549,0.195386,0.509112,0.743791,-0.247059,0.260715,0.573841,0.777209,-0.121569,0.341423,0.628958,0.808704,0.00392157,0.422745,0.684075,0.839892,0.129412,0.523137,0.739193,0.861546,0.254902,0.622684,0.793464,0.883429,0.380392,0.701423,0.826928,0.910988,0.505882,0.778685,0.8603,0.937993,0.631373,0.825928,0.891795,0.953741,0.756863,0.87328,0.923291,0.969489,0.882353,0.922491,0.954787,0.985236,1,0.968627,0.984314,1]},{"ColorSpace":"Lab","Name":"Greens","RGBPoints":[-1,0,0.266667,0.105882,-0.87451,0,0.347374,0.139346,-0.74902,0.000538,0.427912,0.172933,-0.623529,0.069435,0.486967,0.222145,-0.498039,0.138178,0.546082,0.271326,-0.372549,0.197232,0.609073,0.31857,-0.247059,0.257255,0.671742,0.365859,-0.121569,0.357647,0.720953,0.415071,0.00392157,0.45767,0.769919,0.465021,0.129412,0.546251,0.811257,0.537855,0.254902,0.634295,0.852211,0.610688,0.380392,0.709097,0.883706,0.683522,0.505882,0.78316,0.914833,0.755894,0.631373,0.842215,0.938454,0.818885,0.756863,0.899977,0.961538,0.880692,0.882353,0.935409,0.975317,0.92203,1,0.968627,0.988235,0.960784]},{"ColorSpace":"Lab","Name":"Reds","RGBPoints":[-1,0.403922,0,0.05098,-0.87451,0.525967,0.029527,0.066728,-0.74902,0.647643,0.058962,0.082476,-0.623529,0.722445,0.076678,0.098224,-0.498039,0.797186,0.095194,0.114187,-0.372549,0.868051,0.164091,0.143714,-0.247059,0.937809,0.233541,0.173933,-0.121569,0.96143,0.326059,0.232987,0.00392157,0.984375,0.418147,0.292657,0.129412,0.986344,0.496886,0.371396,0.254902,0.988235,0.575702,0.450673,0.380392,0.988235,0.656409,0.543191,0.505882,0.98842,0.736747,0.635894,0.631373,0.992357,0.809581,0.732349,0.756863,0.996186,0.880692,0.826759,0.882353,0.998155,0.92203,0.885813,1,1,0.960784,0.941176]},{"ColorSpace":"Lab","Name":"BrOrYl","RGBPoints":[-1,0.4,0.145098,0.023529,-0.87451,0.500392,0.174625,0.019592,-0.74902,0.600784,0.204291,0.015656,-0.623529,0.701176,0.251534,0.011719,-0.498039,0.800984,0.299146,0.008397,-0.372549,0.863975,0.370012,0.043829,-0.247059,0.926321,0.441107,0.0794,-0.121569,0.961753,0.521815,0.120738,0.00392157,0.996078,0.602645,0.163122,0.129412,0.996078,0.68729,0.237924,0.254902,0.996078,0.771011,0.314879,0.380392,0.996078,0.832034,0.444798,0.505882,0.996171,0.892042,0.572595,0.631373,0.998139,0.931411,0.65724,0.756863,1,0.969489,0.741669,0.882353,1,0.985236,0.822376,1,1,1,0.898039]},{"ColorSpace":"Lab","Name":"blue2yellow","RGBPoints":[-1,0,0,1,0,0.5,0.5,0.5,1,1,1,0]},{"ColorSpace":"Lab","Name":"erdc_cyan2orange","RGBPoints":[-1,0.0471513,0.213874,0.414329,-0.87451,0.0674702,0.256648,0.439027,-0.74902,0.0959957,0.299331,0.462089,-0.623529,0.132428,0.341872,0.483212,-0.498039,0.188743,0.38277,0.500597,-0.372549,0.268511,0.420229,0.512179,-0.247059,0.352945,0.455602,0.519101,-0.121569,0.43893,0.489368,0.521538,0.00392157,0.522445,0.522495,0.522436,0.129412,0.600089,0.555682,0.53205,0.254902,0.67988,0.587981,0.539163,0.380392,0.761011,0.619586,0.544439,0.505882,0.84278,0.650741,0.548567,0.631373,0.910713,0.687347,0.557822,0.756863,0.952232,0.734972,0.577775,0.882353,0.975642,0.789858,0.604868,1,0.990752,0.843643,0.632857]},{"ColorSpace":"Lab","Name":"coolwarm","RGBPoints":[-1,0.229806,0.298718,0.753683,-0.875,0.303869,0.406535,0.844959,-0.75,0.383013,0.509419,0.917388,-0.625,0.466667,0.604563,0.968155,-0.5,0.552953,0.688929,0.995376,-0.375,0.639176,0.7596,0.998151,-0.25,0.722193,0.813953,0.976575,-0.125,0.798692,0.849786,0.931689,0,0.865395,0.86541,0.865396,0.125,0.924128,0.827385,0.774508,0.25,0.958853,0.769768,0.678008,0.375,0.969954,0.694267,0.579375,0.5,0.958003,0.602842,0.481776,0.625,0.923945,0.497309,0.38797,0.75,0.869187,0.378313,0.300267,0.875,0.795632,0.241284,0.220526,1,0.705673,0.0155562,0.150233]},{"ColorSpace":"Lab","Name":"BuRd","RGBPoints":[-1,0.019608,0.188235,0.380392,-0.87451,0.088504,0.321107,0.564937,-0.74902,0.163399,0.444983,0.697501,-0.623529,0.247059,0.555709,0.754095,-0.498039,0.420684,0.676432,0.818685,-0.372549,0.606459,0.789773,0.880277,-0.247059,0.761476,0.868512,0.924567,-0.121569,0.878047,0.925721,0.951942,0.00392157,0.969089,0.966474,0.964937,0.129412,0.983852,0.897578,0.846828,0.254902,0.982468,0.800692,0.706113,0.380392,0.960323,0.66782,0.536332,0.505882,0.894579,0.503806,0.399769,0.631373,0.81707,0.33218,0.281046,0.756863,0.728489,0.155017,0.197386,0.882353,0.576932,0.055363,0.14925,1,0.403922,0,0.121569]},{"ColorSpace":"Lab","Name":"GyRd","RGBPoints":[-1,0.101961,0.101961,0.101961,-0.87451,0.227451,0.227451,0.227451,-0.74902,0.359939,0.359939,0.359939,-0.623529,0.502653,0.502653,0.502653,-0.498039,0.631373,0.631373,0.631373,-0.372549,0.749865,0.749865,0.749865,-0.247059,0.843368,0.843368,0.843368,-0.121569,0.926105,0.926105,0.926105,0.00392157,0.999846,0.997232,0.995694,0.129412,0.994925,0.908651,0.857901,0.254902,0.982468,0.800692,0.706113,0.380392,0.960323,0.66782,0.536332,0.505882,0.894579,0.503806,0.399769,0.631373,0.81707,0.33218,0.281046,0.756863,0.728489,0.155017,0.197386,0.882353,0.576932,0.055363,0.14925,1,0.403922,0,0.121569]},{"ColorSpace":"Lab","Name":"GBBr","RGBPoints":[-1,0,0.235294,0.188235,-0.87451,0.002461,0.338639,0.301423,-0.74902,0.055902,0.448981,0.417609,-0.623529,0.183852,0.56955,0.538178,-0.498039,0.357785,0.700115,0.660746,-0.372549,0.540177,0.819531,0.77624,-0.247059,0.714879,0.890888,0.864821,-0.121569,0.851134,0.934564,0.922645,0.00392157,0.960861,0.959785,0.95694,0.129412,0.963322,0.927797,0.83391,0.254902,0.939946,0.868897,0.68935,0.380392,0.883353,0.775394,0.517109,0.505882,0.808074,0.625836,0.324106,0.631373,0.717647,0.476355,0.15494,0.756863,0.592157,0.358247,0.06882,0.882353,0.458593,0.26436,0.031142,1,0.329412,0.188235,0.019608]},{"ColorSpace":"Lab","Name":"erdc_divLow_icePeach","RGBPoints":[-1,0.480048,0.817441,0.998056,-0.87451,0.425898,0.726921,0.883187,-0.74902,0.366682,0.629445,0.761936,-0.623529,0.308756,0.531002,0.640217,-0.498039,0.258021,0.43705,0.523433,-0.372549,0.219244,0.352381,0.416348,-0.247059,0.195127,0.281032,0.322979,-0.121569,0.186286,0.22627,0.246525,0.00392157,0.192352,0.19236,0.192364,0.129412,0.255927,0.214469,0.191756,0.254902,0.340459,0.254426,0.206666,0.380392,0.444655,0.309315,0.234029,0.505882,0.565353,0.376004,0.270969,0.631373,0.697917,0.450748,0.314293,0.756863,0.836657,0.529064,0.360227,0.882353,0.972695,0.614884,0.413123,1,1,0.705904,0.472699]},{"ColorSpace":"RGB","Name":"Haze","RGBPoints":[-1,1,0.835294,0.996078,-0.00392157,0.023529,0.141176,0.498039,0.00392157,0.015686,0.137255,0.494118,1,0.984314,0.764706,0]},{"ColorSpace":"Lab","Name":"erdc_iceFire_L","RGBPoints":[-1,0.870485,0.913768,0.832905,-0.87451,0.586919,0.887865,0.934003,-0.74902,0.31583,0.776442,0.867858,-0.623529,0.18302,0.632034,0.787722,-0.498039,0.117909,0.484134,0.713825,-0.372549,0.0507239,0.335979,0.654741,-0.247059,0,0.209874,0.511832,-0.121569,0,0.114689,0.28935,0.00392157,0.0157519,0.00332021,4.55569e-8,0.129412,0.312914,0,0,0.254902,0.520865,0,0,0.380392,0.680105,0.15255,0.0025996,0.505882,0.785109,0.339479,0.000797922,0.631373,0.857354,0.522494,0,0.756863,0.910974,0.699774,0,0.882353,0.951921,0.842817,0.478545,1,0.881371,0.912178,0.818099]},{"IndexedColors":[0,0,0,0.8941176470588236,0.1019607843137255,0.1098039215686274,0.2156862745098039,0.4941176470588236,0.7215686274509804,0.3019607843137255,0.6862745098039216,0.2901960784313726,0.596078431372549,0.3058823529411765,0.6392156862745098,1,0.4980392156862745,0,0.6509803921568628,0.3372549019607843,0.1568627450980392],"Name":"Spectrum","NanColor":[0.6509803921568628,0.3372549019607843,0.1568627450980392]},{"IndexedColors":[0.4745098039215686,0.09019607843137255,0.09019607843137255,0.7098039215686275,0.00392156862745098,0.00392156862745098,0.9372549019607843,0.2784313725490196,0.09803921568627451,0.9764705882352941,0.5137254901960784,0.1411764705882353,1,0.7058823529411765,0,1,0.8980392156862745,0.02352941176470588],"Name":"Warm","NanColor":[1,0.8980392156862745,0.02352941176470588]},{"IndexedColors":[0.4588235294117647,0.6941176470588235,0.00392156862745098,0.3450980392156863,0.5019607843137255,0.1607843137254902,0.3137254901960784,0.8431372549019608,0.7490196078431373,0.1098039215686274,0.5843137254901961,0.803921568627451,0.2313725490196079,0.407843137254902,0.6705882352941176,0.6039215686274509,0.407843137254902,1,0.3725490196078431,0.2,0.5019607843137255],"Name":"Cool","NanColor":[0.3725490196078431,0.2,0.5019607843137255]},{"IndexedColors":[0.2313725490196079,0.407843137254902,0.6705882352941176,0.1098039215686274,0.5843137254901961,0.803921568627451,0.3058823529411765,0.8509803921568627,0.9176470588235294,0.4509803921568628,0.6039215686274509,0.8352941176470589,0.2588235294117647,0.2392156862745098,0.6627450980392157,0.3137254901960784,0.3294117647058823,0.5294117647058824,0.06274509803921569,0.1647058823529412,0.3215686274509804],"Name":"Blues","NanColor":[0.06274509803921569,0.1647058823529412,0.3215686274509804]},{"IndexedColors":[0.1098039215686274,0.5843137254901961,0.803921568627451,0.2313725490196079,0.407843137254902,0.6705882352941176,0.4,0.2431372549019608,0.7176470588235294,0.6352941176470588,0.3294117647058823,0.8117647058823529,0.8705882352941177,0.3803921568627451,0.807843137254902,0.8627450980392157,0.3803921568627451,0.5843137254901961,0.2392156862745098,0.06274509803921569,0.3215686274509804],"Name":"Wild Flower","NanColor":[0.2392156862745098,0.06274509803921569,0.3215686274509804]},{"IndexedColors":[0.396078431372549,0.4862745098039216,0.2156862745098039,0.4588235294117647,0.6941176470588235,0.00392156862745098,0.6980392156862745,0.7294117647058823,0.1882352941176471,1,0.8980392156862745,0.02352941176470588,1,0.7058823529411765,0,0.9764705882352941,0.5137254901960784,0.1411764705882353],"Name":"Citrus","NanColor":[0.9764705882352941,0.5137254901960784,0.1411764705882353]},{"IndexedColors":[0.4980392156862745,0.2313725490196079,0.03137254901960784,0.7019607843137254,0.3450980392156863,0.02352941176470588,0.8784313725490196,0.5098039215686274,0.0784313725490196,0.9921568627450981,0.7215686274509804,0.3882352941176471,0.996078431372549,0.8784313725490196,0.7137254901960784,0.9686274509803922,0.9686274509803922,0.9686274509803922,0.8470588235294118,0.8549019607843137,0.9215686274509803,0.6980392156862745,0.6705882352941176,0.8235294117647058,0.5019607843137255,0.4509803921568628,0.6745098039215687,0.3294117647058823,0.1529411764705882,0.5333333333333333,0.1764705882352941,0,0.2941176470588235],"Name":"Brewer Diverging Purple-Orange (11)","NanColor":[0.1764705882352941,0,0.2941176470588235]},{"IndexedColors":[0.4980392156862745,0.2313725490196079,0.03137254901960784,0.7019607843137254,0.3450980392156863,0.02352941176470588,0.8784313725490196,0.5098039215686274,0.0784313725490196,0.9921568627450981,0.7215686274509804,0.3882352941176471,0.996078431372549,0.8784313725490196,0.7137254901960784,0.8470588235294118,0.8549019607843137,0.9215686274509803,0.6980392156862745,0.6705882352941176,0.8235294117647058,0.5019607843137255,0.4509803921568628,0.6745098039215687,0.3294117647058823,0.1529411764705882,0.5333333333333333,0.1764705882352941,0,0.2941176470588235],"Name":"Brewer Diverging Purple-Orange (10)","NanColor":[0.1764705882352941,0,0.2941176470588235]},{"IndexedColors":[0.7019607843137254,0.3450980392156863,0.02352941176470588,0.8784313725490196,0.5098039215686274,0.0784313725490196,0.9921568627450981,0.7215686274509804,0.3882352941176471,0.996078431372549,0.8784313725490196,0.7137254901960784,0.9686274509803922,0.9686274509803922,0.9686274509803922,0.8470588235294118,0.8549019607843137,0.9215686274509803,0.6980392156862745,0.6705882352941176,0.8235294117647058,0.5019607843137255,0.4509803921568628,0.6745098039215687,0.3294117647058823,0.1529411764705882,0.5333333333333333],"Name":"Brewer Diverging Purple-Orange (9)","NanColor":[0.3294117647058823,0.1529411764705882,0.5333333333333333]},{"IndexedColors":[0.7019607843137254,0.3450980392156863,0.02352941176470588,0.8784313725490196,0.5098039215686274,0.0784313725490196,0.9921568627450981,0.7215686274509804,0.3882352941176471,0.996078431372549,0.8784313725490196,0.7137254901960784,0.8470588235294118,0.8549019607843137,0.9215686274509803,0.6980392156862745,0.6705882352941176,0.8235294117647058,0.5019607843137255,0.4509803921568628,0.6745098039215687,0.3294117647058823,0.1529411764705882,0.5333333333333333],"Name":"Brewer Diverging Purple-Orange (8)","NanColor":[0.3294117647058823,0.1529411764705882,0.5333333333333333]},{"IndexedColors":[0.7019607843137254,0.3450980392156863,0.02352941176470588,0.9450980392156862,0.6392156862745098,0.2509803921568627,0.996078431372549,0.8784313725490196,0.7137254901960784,0.9686274509803922,0.9686274509803922,0.9686274509803922,0.8470588235294118,0.8549019607843137,0.9215686274509803,0.6,0.5568627450980392,0.7647058823529411,0.3294117647058823,0.1529411764705882,0.5333333333333333],"Name":"Brewer Diverging Purple-Orange (7)","NanColor":[0.3294117647058823,0.1529411764705882,0.5333333333333333]},{"IndexedColors":[0.7019607843137254,0.3450980392156863,0.02352941176470588,0.9450980392156862,0.6392156862745098,0.2509803921568627,0.996078431372549,0.8784313725490196,0.7137254901960784,0.8470588235294118,0.8549019607843137,0.9215686274509803,0.6,0.5568627450980392,0.7647058823529411,0.3294117647058823,0.1529411764705882,0.5333333333333333],"Name":"Brewer Diverging Purple-Orange (6)","NanColor":[0.3294117647058823,0.1529411764705882,0.5333333333333333]},{"IndexedColors":[0.9019607843137255,0.3803921568627451,0.00392156862745098,0.9921568627450981,0.7215686274509804,0.3882352941176471,0.9686274509803922,0.9686274509803922,0.9686274509803922,0.6980392156862745,0.6705882352941176,0.8235294117647058,0.3686274509803922,0.2352941176470588,0.6],"Name":"Brewer Diverging Purple-Orange (5)","NanColor":[0.3686274509803922,0.2352941176470588,0.6]},{"IndexedColors":[0.9019607843137255,0.3803921568627451,0.00392156862745098,0.9921568627450981,0.7215686274509804,0.3882352941176471,0.6980392156862745,0.6705882352941176,0.8235294117647058,0.3686274509803922,0.2352941176470588,0.6],"Name":"Brewer Diverging Purple-Orange (4)","NanColor":[0.3686274509803922,0.2352941176470588,0.6]},{"IndexedColors":[0.9450980392156862,0.6392156862745098,0.2509803921568627,0.9686274509803922,0.9686274509803922,0.9686274509803922,0.6,0.5568627450980392,0.7647058823529411],"Name":"Brewer Diverging Purple-Orange (3)","NanColor":[0.6,0.5568627450980392,0.7647058823529411]},{"IndexedColors":[0.6196078431372549,0.00392156862745098,0.2588235294117647,0.8352941176470589,0.2431372549019608,0.3098039215686275,0.9568627450980393,0.4274509803921568,0.2627450980392157,0.9921568627450981,0.6823529411764706,0.3803921568627451,0.996078431372549,0.8784313725490196,0.5450980392156862,1,1,0.7490196078431373,0.9019607843137255,0.9607843137254902,0.596078431372549,0.6705882352941176,0.8666666666666667,0.6431372549019608,0.4,0.7607843137254902,0.6470588235294118,0.196078431372549,0.5333333333333333,0.7411764705882353,0.3686274509803922,0.3098039215686275,0.6352941176470588],"Name":"Brewer Diverging Spectral (11)","NanColor":[0.3686274509803922,0.3098039215686275,0.6352941176470588]},{"IndexedColors":[0.6196078431372549,0.00392156862745098,0.2588235294117647,0.8352941176470589,0.2431372549019608,0.3098039215686275,0.9568627450980393,0.4274509803921568,0.2627450980392157,0.9921568627450981,0.6823529411764706,0.3803921568627451,0.996078431372549,0.8784313725490196,0.5450980392156862,0.9019607843137255,0.9607843137254902,0.596078431372549,0.6705882352941176,0.8666666666666667,0.6431372549019608,0.4,0.7607843137254902,0.6470588235294118,0.196078431372549,0.5333333333333333,0.7411764705882353,0.3686274509803922,0.3098039215686275,0.6352941176470588],"Name":"Brewer Diverging Spectral (10)","NanColor":[0.3686274509803922,0.3098039215686275,0.6352941176470588]},{"IndexedColors":[0.8352941176470589,0.2431372549019608,0.3098039215686275,0.9568627450980393,0.4274509803921568,0.2627450980392157,0.9921568627450981,0.6823529411764706,0.3803921568627451,0.996078431372549,0.8784313725490196,0.5450980392156862,1,1,0.7490196078431373,0.9019607843137255,0.9607843137254902,0.596078431372549,0.6705882352941176,0.8666666666666667,0.6431372549019608,0.4,0.7607843137254902,0.6470588235294118,0.196078431372549,0.5333333333333333,0.7411764705882353],"Name":"Brewer Diverging Spectral (9)","NanColor":[0.196078431372549,0.5333333333333333,0.7411764705882353]},{"IndexedColors":[0.8352941176470589,0.2431372549019608,0.3098039215686275,0.9568627450980393,0.4274509803921568,0.2627450980392157,0.9921568627450981,0.6823529411764706,0.3803921568627451,0.996078431372549,0.8784313725490196,0.5450980392156862,0.9019607843137255,0.9607843137254902,0.596078431372549,0.6705882352941176,0.8666666666666667,0.6431372549019608,0.4,0.7607843137254902,0.6470588235294118,0.196078431372549,0.5333333333333333,0.7411764705882353],"Name":"Brewer Diverging Spectral (8)","NanColor":[0.196078431372549,0.5333333333333333,0.7411764705882353]},{"IndexedColors":[0.8352941176470589,0.2431372549019608,0.3098039215686275,0.9882352941176471,0.5529411764705883,0.3490196078431372,0.996078431372549,0.8784313725490196,0.5450980392156862,1,1,0.7490196078431373,0.9019607843137255,0.9607843137254902,0.596078431372549,0.6,0.8352941176470589,0.5803921568627451,0.196078431372549,0.5333333333333333,0.7411764705882353],"Name":"Brewer Diverging Spectral (7)","NanColor":[0.196078431372549,0.5333333333333333,0.7411764705882353]},{"IndexedColors":[0.8352941176470589,0.2431372549019608,0.3098039215686275,0.9882352941176471,0.5529411764705883,0.3490196078431372,0.996078431372549,0.8784313725490196,0.5450980392156862,0.9019607843137255,0.9607843137254902,0.596078431372549,0.6,0.8352941176470589,0.5803921568627451,0.196078431372549,0.5333333333333333,0.7411764705882353],"Name":"Brewer Diverging Spectral (6)","NanColor":[0.196078431372549,0.5333333333333333,0.7411764705882353]},{"IndexedColors":[0.8431372549019608,0.09803921568627451,0.1098039215686274,0.9921568627450981,0.6823529411764706,0.3803921568627451,1,1,0.7490196078431373,0.6705882352941176,0.8666666666666667,0.6431372549019608,0.1686274509803922,0.5137254901960784,0.7294117647058823],"Name":"Brewer Diverging Spectral (5)","NanColor":[0.1686274509803922,0.5137254901960784,0.7294117647058823]},{"IndexedColors":[0.8431372549019608,0.09803921568627451,0.1098039215686274,0.9921568627450981,0.6823529411764706,0.3803921568627451,0.6705882352941176,0.8666666666666667,0.6431372549019608,0.1686274509803922,0.5137254901960784,0.7294117647058823],"Name":"Brewer Diverging Spectral (4)","NanColor":[0.1686274509803922,0.5137254901960784,0.7294117647058823]},{"IndexedColors":[0.9882352941176471,0.5529411764705883,0.3490196078431372,1,1,0.7490196078431373,0.6,0.8352941176470589,0.5803921568627451],"Name":"Brewer Diverging Spectral (3)","NanColor":[0.6,0.8352941176470589,0.5803921568627451]},{"IndexedColors":[0.3294117647058823,0.1882352941176471,0.0196078431372549,0.5490196078431373,0.3176470588235294,0.0392156862745098,0.7490196078431373,0.5058823529411764,0.1764705882352941,0.8745098039215686,0.7607843137254902,0.4901960784313725,0.9647058823529412,0.9098039215686274,0.7647058823529411,0.9607843137254902,0.9607843137254902,0.9607843137254902,0.7803921568627451,0.9176470588235294,0.8980392156862745,0.5019607843137255,0.803921568627451,0.7568627450980392,0.207843137254902,0.592156862745098,0.5607843137254902,0.00392156862745098,0.4,0.3686274509803922,0,0.2352941176470588,0.1882352941176471],"Name":"Brewer Diverging Brown-Blue-Green (11)","NanColor":[0,0.2352941176470588,0.1882352941176471]},{"IndexedColors":[0.3294117647058823,0.1882352941176471,0.0196078431372549,0.5490196078431373,0.3176470588235294,0.0392156862745098,0.7490196078431373,0.5058823529411764,0.1764705882352941,0.8745098039215686,0.7607843137254902,0.4901960784313725,0.9647058823529412,0.9098039215686274,0.7647058823529411,0.7803921568627451,0.9176470588235294,0.8980392156862745,0.5019607843137255,0.803921568627451,0.7568627450980392,0.207843137254902,0.592156862745098,0.5607843137254902,0.00392156862745098,0.4,0.3686274509803922,0,0.2352941176470588,0.1882352941176471],"Name":"Brewer Diverging Brown-Blue-Green (10)","NanColor":[0,0.2352941176470588,0.1882352941176471]},{"IndexedColors":[0.5490196078431373,0.3176470588235294,0.0392156862745098,0.7490196078431373,0.5058823529411764,0.1764705882352941,0.8745098039215686,0.7607843137254902,0.4901960784313725,0.9647058823529412,0.9098039215686274,0.7647058823529411,0.9607843137254902,0.9607843137254902,0.9607843137254902,0.7803921568627451,0.9176470588235294,0.8980392156862745,0.5019607843137255,0.803921568627451,0.7568627450980392,0.207843137254902,0.592156862745098,0.5607843137254902,0.00392156862745098,0.4,0.3686274509803922],"Name":"Brewer Diverging Brown-Blue-Green (9)","NanColor":[0.00392156862745098,0.4,0.3686274509803922]},{"IndexedColors":[0.5490196078431373,0.3176470588235294,0.0392156862745098,0.7490196078431373,0.5058823529411764,0.1764705882352941,0.8745098039215686,0.7607843137254902,0.4901960784313725,0.9647058823529412,0.9098039215686274,0.7647058823529411,0.7803921568627451,0.9176470588235294,0.8980392156862745,0.5019607843137255,0.803921568627451,0.7568627450980392,0.207843137254902,0.592156862745098,0.5607843137254902,0.00392156862745098,0.4,0.3686274509803922],"Name":"Brewer Diverging Brown-Blue-Green (8)","NanColor":[0.00392156862745098,0.4,0.3686274509803922]},{"IndexedColors":[0.5490196078431373,0.3176470588235294,0.0392156862745098,0.8470588235294118,0.7019607843137254,0.396078431372549,0.9647058823529412,0.9098039215686274,0.7647058823529411,0.9607843137254902,0.9607843137254902,0.9607843137254902,0.7803921568627451,0.9176470588235294,0.8980392156862745,0.3529411764705883,0.7058823529411765,0.6745098039215687,0.00392156862745098,0.4,0.3686274509803922],"Name":"Brewer Diverging Brown-Blue-Green (7)","NanColor":[0.00392156862745098,0.4,0.3686274509803922]},{"IndexedColors":[0.5490196078431373,0.3176470588235294,0.0392156862745098,0.8470588235294118,0.7019607843137254,0.396078431372549,0.9647058823529412,0.9098039215686274,0.7647058823529411,0.7803921568627451,0.9176470588235294,0.8980392156862745,0.3529411764705883,0.7058823529411765,0.6745098039215687,0.00392156862745098,0.4,0.3686274509803922],"Name":"Brewer Diverging Brown-Blue-Green (6)","NanColor":[0.00392156862745098,0.4,0.3686274509803922]},{"IndexedColors":[0.6509803921568628,0.3803921568627451,0.1019607843137255,0.8745098039215686,0.7607843137254902,0.4901960784313725,0.9607843137254902,0.9607843137254902,0.9607843137254902,0.5019607843137255,0.803921568627451,0.7568627450980392,0.00392156862745098,0.5215686274509804,0.4431372549019608],"Name":"Brewer Diverging Brown-Blue-Green (5)","NanColor":[0.00392156862745098,0.5215686274509804,0.4431372549019608]},{"IndexedColors":[0.6509803921568628,0.3803921568627451,0.1019607843137255,0.8745098039215686,0.7607843137254902,0.4901960784313725,0.5019607843137255,0.803921568627451,0.7568627450980392,0.00392156862745098,0.5215686274509804,0.4431372549019608],"Name":"Brewer Diverging Brown-Blue-Green (4)","NanColor":[0.00392156862745098,0.5215686274509804,0.4431372549019608]},{"IndexedColors":[0.8470588235294118,0.7019607843137254,0.396078431372549,0.9607843137254902,0.9607843137254902,0.9607843137254902,0.3529411764705883,0.7058823529411765,0.6745098039215687],"Name":"Brewer Diverging Brown-Blue-Green (3)","NanColor":[0.3529411764705883,0.7058823529411765,0.6745098039215687]},{"IndexedColors":[0.9686274509803922,0.9882352941176471,0.9921568627450981,0.8980392156862745,0.9607843137254902,0.9764705882352941,0.8,0.9254901960784314,0.9019607843137255,0.6,0.8470588235294118,0.788235294117647,0.4,0.7607843137254902,0.6431372549019608,0.2549019607843137,0.6823529411764706,0.4627450980392157,0.1372549019607843,0.5450980392156862,0.2705882352941176,0,0.4274509803921568,0.1725490196078431,0,0.2666666666666667,0.1058823529411765],"Name":"Brewer Sequential Blue-Green (9)","NanColor":[0,0.2666666666666667,0.1058823529411765]},{"IndexedColors":[0.9686274509803922,0.9882352941176471,0.9921568627450981,0.8980392156862745,0.9607843137254902,0.9764705882352941,0.8,0.9254901960784314,0.9019607843137255,0.6,0.8470588235294118,0.788235294117647,0.4,0.7607843137254902,0.6431372549019608,0.2549019607843137,0.6823529411764706,0.4627450980392157,0.1372549019607843,0.5450980392156862,0.2705882352941176,0,0.3450980392156863,0.1411764705882353],"Name":"Brewer Sequential Blue-Green (8)","NanColor":[0,0.3450980392156863,0.1411764705882353]},{"IndexedColors":[0.9294117647058824,0.9725490196078431,0.984313725490196,0.8,0.9254901960784314,0.9019607843137255,0.8,0.9254901960784314,0.9019607843137255,0.4,0.7607843137254902,0.6431372549019608,0.2549019607843137,0.6823529411764706,0.4627450980392157,0.1372549019607843,0.5450980392156862,0.2705882352941176,0,0.3450980392156863,0.1411764705882353],"Name":"Brewer Sequential Blue-Green (7)","NanColor":[0,0.3450980392156863,0.1411764705882353]},{"IndexedColors":[0.9294117647058824,0.9725490196078431,0.984313725490196,0.8,0.9254901960784314,0.9019607843137255,0.6,0.8470588235294118,0.788235294117647,0.4,0.7607843137254902,0.6431372549019608,0.1725490196078431,0.6352941176470588,0.3725490196078431,0,0.4274509803921568,0.1725490196078431],"Name":"Brewer Sequential Blue-Green (6)","NanColor":[0,0.4274509803921568,0.1725490196078431]},{"IndexedColors":[0.9294117647058824,0.9725490196078431,0.984313725490196,0.6980392156862745,0.8862745098039215,0.8862745098039215,0.4,0.7607843137254902,0.6431372549019608,0.1725490196078431,0.6352941176470588,0.3725490196078431,0,0.4274509803921568,0.1725490196078431],"Name":"Brewer Sequential Blue-Green (5)","NanColor":[0,0.4274509803921568,0.1725490196078431]},{"IndexedColors":[0.9294117647058824,0.9725490196078431,0.984313725490196,0.6980392156862745,0.8862745098039215,0.8862745098039215,0.4,0.7607843137254902,0.6431372549019608,0.1372549019607843,0.5450980392156862,0.2705882352941176],"Name":"Brewer Sequential Blue-Green (4)","NanColor":[0.1372549019607843,0.5450980392156862,0.2705882352941176]},{"IndexedColors":[0.8980392156862745,0.9607843137254902,0.9764705882352941,0.6,0.8470588235294118,0.788235294117647,0.1725490196078431,0.6352941176470588,0.3725490196078431],"Name":"Brewer Sequential Blue-Green (3)","NanColor":[0.1725490196078431,0.6352941176470588,0.3725490196078431]},{"IndexedColors":[1,1,0.8980392156862745,1,0.9686274509803922,0.7372549019607844,0.996078431372549,0.8901960784313725,0.5686274509803921,0.996078431372549,0.7686274509803922,0.3098039215686275,0.996078431372549,0.6,0.1607843137254902,0.9254901960784314,0.4392156862745098,0.0784313725490196,0.8,0.2980392156862745,0.00784313725490196,0.6,0.203921568627451,0.01568627450980392,0.4,0.1450980392156863,0.02352941176470588],"Name":"Brewer Sequential Yellow-Orange-Brown (9)","NanColor":[0.4,0.1450980392156863,0.02352941176470588]},{"IndexedColors":[1,1,0.8980392156862745,1,0.9686274509803922,0.7372549019607844,0.996078431372549,0.8901960784313725,0.5686274509803921,0.996078431372549,0.7686274509803922,0.3098039215686275,0.996078431372549,0.6,0.1607843137254902,0.9254901960784314,0.4392156862745098,0.0784313725490196,0.8,0.2980392156862745,0.00784313725490196,0.5490196078431373,0.1764705882352941,0.01568627450980392],"Name":"Brewer Sequential Yellow-Orange-Brown (8)","NanColor":[0.5490196078431373,0.1764705882352941,0.01568627450980392]},{"IndexedColors":[1,1,0.8313725490196079,0.996078431372549,0.8901960784313725,0.5686274509803921,0.996078431372549,0.7686274509803922,0.3098039215686275,0.996078431372549,0.6,0.1607843137254902,0.9254901960784314,0.4392156862745098,0.0784313725490196,0.8,0.2980392156862745,0.00784313725490196,0.5490196078431373,0.1764705882352941,0.01568627450980392],"Name":"Brewer Sequential Yellow-Orange-Brown (7)","NanColor":[0.5490196078431373,0.1764705882352941,0.01568627450980392]},{"IndexedColors":[1,1,0.8313725490196079,0.996078431372549,0.8901960784313725,0.5686274509803921,0.996078431372549,0.7686274509803922,0.3098039215686275,0.996078431372549,0.6,0.1607843137254902,0.8509803921568627,0.3725490196078431,0.05490196078431372,0.6,0.203921568627451,0.01568627450980392],"Name":"Brewer Sequential Yellow-Orange-Brown (6)","NanColor":[0.6,0.203921568627451,0.01568627450980392]},{"IndexedColors":[1,1,0.8313725490196079,0.996078431372549,0.8509803921568627,0.5568627450980392,0.996078431372549,0.6,0.1607843137254902,0.8509803921568627,0.3725490196078431,0.05490196078431372,0.6,0.203921568627451,0.01568627450980392],"Name":"Brewer Sequential Yellow-Orange-Brown (5)","NanColor":[0.6,0.203921568627451,0.01568627450980392]},{"IndexedColors":[1,1,0.8313725490196079,0.996078431372549,0.8509803921568627,0.5568627450980392,0.996078431372549,0.6,0.1607843137254902,0.8,0.2980392156862745,0.00784313725490196],"Name":"Brewer Sequential Yellow-Orange-Brown (4)","NanColor":[0.8,0.2980392156862745,0.00784313725490196]},{"IndexedColors":[1,0.9686274509803922,0.7372549019607844,0.996078431372549,0.7686274509803922,0.3098039215686275,0.8509803921568627,0.3725490196078431,0.05490196078431372],"Name":"Brewer Sequential Yellow-Orange-Brown (3)","NanColor":[0.8509803921568627,0.3725490196078431,0.05490196078431372]},{"IndexedColors":[0.9686274509803922,0.9882352941176471,0.9921568627450981,0.8784313725490196,0.9254901960784314,0.9568627450980393,0.7490196078431373,0.8274509803921568,0.9019607843137255,0.6196078431372549,0.7372549019607844,0.8549019607843137,0.5490196078431373,0.5882352941176471,0.7764705882352941,0.5490196078431373,0.4196078431372549,0.6941176470588235,0.5333333333333333,0.2549019607843137,0.615686274509804,0.5058823529411764,0.05882352941176471,0.4862745098039216,0.3019607843137255,0,0.2941176470588235],"Name":"Brewer Sequential Blue-Purple (9)","NanColor":[0.3019607843137255,0,0.2941176470588235]},{"IndexedColors":[0.9686274509803922,0.9882352941176471,0.9921568627450981,0.8784313725490196,0.9254901960784314,0.9568627450980393,0.7490196078431373,0.8274509803921568,0.9019607843137255,0.6196078431372549,0.7372549019607844,0.8549019607843137,0.5490196078431373,0.5882352941176471,0.7764705882352941,0.5490196078431373,0.4196078431372549,0.6941176470588235,0.5333333333333333,0.2549019607843137,0.615686274509804,0.4313725490196079,0.00392156862745098,0.4196078431372549],"Name":"Brewer Sequential Blue-Purple (8)","NanColor":[0.4313725490196079,0.00392156862745098,0.4196078431372549]},{"IndexedColors":[0.9294117647058824,0.9725490196078431,0.984313725490196,0.7490196078431373,0.8274509803921568,0.9019607843137255,0.6196078431372549,0.7372549019607844,0.8549019607843137,0.5490196078431373,0.5882352941176471,0.7764705882352941,0.5490196078431373,0.4196078431372549,0.6941176470588235,0.5333333333333333,0.2549019607843137,0.615686274509804,0.4313725490196079,0.00392156862745098,0.4196078431372549],"Name":"Brewer Sequential Blue-Purple (7)","NanColor":[0.4313725490196079,0.00392156862745098,0.4196078431372549]},{"IndexedColors":[0.9294117647058824,0.9725490196078431,0.984313725490196,0.7490196078431373,0.8274509803921568,0.9019607843137255,0.6196078431372549,0.7372549019607844,0.8549019607843137,0.5490196078431373,0.5882352941176471,0.7764705882352941,0.5333333333333333,0.3372549019607843,0.6549019607843137,0.5058823529411764,0.05882352941176471,0.4862745098039216],"Name":"Brewer Sequential Blue-Purple (6)","NanColor":[0.5058823529411764,0.05882352941176471,0.4862745098039216]},{"IndexedColors":[0.9294117647058824,0.9725490196078431,0.984313725490196,0.7019607843137254,0.803921568627451,0.8901960784313725,0.5490196078431373,0.5882352941176471,0.7764705882352941,0.5333333333333333,0.3372549019607843,0.6549019607843137,0.5058823529411764,0.05882352941176471,0.4862745098039216],"Name":"Brewer Sequential Blue-Purple (5)","NanColor":[0.5058823529411764,0.05882352941176471,0.4862745098039216]},{"IndexedColors":[0.9294117647058824,0.9725490196078431,0.984313725490196,0.7019607843137254,0.803921568627451,0.8901960784313725,0.5490196078431373,0.5882352941176471,0.7764705882352941,0.5333333333333333,0.2549019607843137,0.615686274509804],"Name":"Brewer Sequential Blue-Purple (4)","NanColor":[0.5333333333333333,0.2549019607843137,0.615686274509804]},{"IndexedColors":[0.8784313725490196,0.9254901960784314,0.9568627450980393,0.6196078431372549,0.7372549019607844,0.8549019607843137,0.5333333333333333,0.3372549019607843,0.6549019607843137],"Name":"Brewer Sequential Blue-Purple (3)","NanColor":[0.5333333333333333,0.3372549019607843,0.6549019607843137]},{"IndexedColors":[0.4980392156862745,0.788235294117647,0.4980392156862745,0.7450980392156863,0.6823529411764706,0.8313725490196079,0.9921568627450981,0.7529411764705882,0.5254901960784314,1,1,0.6,0.2196078431372549,0.4235294117647059,0.6901960784313725,0.9411764705882353,0.00784313725490196,0.4980392156862745,0.7490196078431373,0.3568627450980392,0.09019607843137255,0.4,0.4,0.4],"Name":"Brewer Qualitative Accent","NanColor":[0.4,0.4,0.4]},{"IndexedColors":[0.1058823529411765,0.6196078431372549,0.4666666666666667,0.8509803921568627,0.3725490196078431,0.00784313725490196,0.4588235294117647,0.4392156862745098,0.7019607843137254,0.9058823529411765,0.1607843137254902,0.5411764705882353,0.4,0.6509803921568628,0.1176470588235294,0.9019607843137255,0.6705882352941176,0.00784313725490196,0.6509803921568628,0.4627450980392157,0.1137254901960784,0.4,0.4,0.4],"Name":"Brewer Qualitative Dark2","NanColor":[0.4,0.4,0.4]},{"IndexedColors":[0.4,0.7607843137254902,0.6470588235294118,0.9882352941176471,0.5529411764705883,0.3843137254901961,0.5529411764705883,0.6274509803921569,0.796078431372549,0.9058823529411765,0.5411764705882353,0.7647058823529411,0.6509803921568628,0.8470588235294118,0.3294117647058823,1,0.8509803921568627,0.1843137254901961,0.8980392156862745,0.7686274509803922,0.5803921568627451,0.7019607843137254,0.7019607843137254,0.7019607843137254],"Name":"Brewer Qualitative Set2","NanColor":[0.7019607843137254,0.7019607843137254,0.7019607843137254]},{"IndexedColors":[0.7019607843137254,0.8862745098039215,0.803921568627451,0.9921568627450981,0.803921568627451,0.6745098039215687,0.796078431372549,0.8352941176470589,0.9098039215686274,0.9568627450980393,0.792156862745098,0.8941176470588236,0.9019607843137255,0.9607843137254902,0.788235294117647,1,0.9490196078431372,0.6823529411764706,0.9450980392156862,0.8862745098039215,0.8,0.8,0.8,0.8],"Name":"Brewer Qualitative Pastel2","NanColor":[0.8,0.8,0.8]},{"IndexedColors":[0.984313725490196,0.7058823529411765,0.6823529411764706,0.7019607843137254,0.803921568627451,0.8901960784313725,0.8,0.9215686274509803,0.7725490196078432,0.8705882352941177,0.796078431372549,0.8941176470588236,0.996078431372549,0.8509803921568627,0.6509803921568628,1,1,0.8,0.8980392156862745,0.8470588235294118,0.7411764705882353,0.9921568627450981,0.8549019607843137,0.9254901960784314,0.9490196078431372,0.9490196078431372,0.9490196078431372],"Name":"Brewer Qualitative Pastel1","NanColor":[0.9490196078431372,0.9490196078431372,0.9490196078431372]},{"IndexedColors":[0.8941176470588236,0.1019607843137255,0.1098039215686274,0.2156862745098039,0.4941176470588236,0.7215686274509804,0.3019607843137255,0.6862745098039216,0.2901960784313726,0.596078431372549,0.3058823529411765,0.6392156862745098,1,0.4980392156862745,0,1,1,0.2,0.6509803921568628,0.3372549019607843,0.1568627450980392,0.9686274509803922,0.5058823529411764,0.7490196078431373,0.6,0.6,0.6],"Name":"Brewer Qualitative Set1","NanColor":[0.6,0.6,0.6]},{"IndexedColors":[0.6509803921568628,0.807843137254902,0.8901960784313725,0.1215686274509804,0.4705882352941176,0.7058823529411765,0.6980392156862745,0.8745098039215686,0.5411764705882353,0.2,0.6274509803921569,0.1725490196078431,0.984313725490196,0.6039215686274509,0.6,0.8901960784313725,0.1019607843137255,0.1098039215686274,0.9921568627450981,0.7490196078431373,0.4352941176470588,1,0.4980392156862745,0,0.792156862745098,0.6980392156862745,0.8392156862745098,0.4156862745098039,0.2392156862745098,0.6039215686274509,1,1,0.6],"Name":"Brewer Qualitative Paired","NanColor":[1,1,0.6]},{"IndexedColors":[0.5529411764705883,0.8274509803921568,0.7803921568627451,1,1,0.7019607843137254,0.7450980392156863,0.7294117647058823,0.8549019607843137,0.984313725490196,0.5019607843137255,0.4470588235294118,0.5019607843137255,0.6941176470588235,0.8274509803921568,0.9921568627450981,0.7058823529411765,0.3843137254901961,0.7019607843137254,0.8705882352941177,0.4117647058823529,0.9882352941176471,0.803921568627451,0.8980392156862745,0.8509803921568627,0.8509803921568627,0.8509803921568627,0.7372549019607844,0.5019607843137255,0.7411764705882353,0.8,0.9215686274509803,0.7725490196078432,1,0.9294117647058824,0.4352941176470588],"Name":"Brewer Qualitative Set3","NanColor":[1,0.9294117647058824,0.4352941176470588]},{"IndexedColors":[1,0,0,1,0.862745,0,0,0.695201,0],"Name":"Traffic Lights","NanColor":[0.803922,0,0.803922]},{"IndexedColors":[0.908659,0.604013,0.581857,1,0.862745,0,0,0.695201,0],"Name":"Traffic Lights For Deuteranopes","NanColor":[0.803922,0,0.803922]},{"IndexedColors":[0.4196078431372549,0,0.07058823529411765,0.9019607843137255,0.9411764705882353,0.0196078431372549,0.01568627450980392,0.6196078431372549,0.00784313725490196],"Name":"Traffic Lights For Deuteranopes 2","NanColor":[0.803922,0,0.803922]},{"ColorSpace":"Lab","Creator":"Francesca Samsel","Name":"Muted Blue-Green","NanColor":[0.25,0,0],"RGBPoints":[0,0.109804,0.27451,0.301961,0.02,0.129412,0.309804,0.341176,0.05,0.14902,0.341176,0.380392,0.1,0.188235,0.403922,0.458824,0.15,0.227451,0.447059,0.521569,0.2,0.290196,0.494118,0.588235,0.25,0.368627,0.552941,0.670588,0.3,0.458824,0.619608,0.74902,0.35,0.588235,0.713725,0.85098,0.4,0.72549,0.815686,0.941176,0.45,0.831373,0.882353,0.980392,0.475,0.909804,0.933333,1,0.5,0.980392,0.984314,1,0.5,0.996078,1,0.94902,0.5,1,1,0.980392,0.5,0.980392,0.984314,1,0.525,0.972549,0.988235,0.890196,0.55,0.917647,0.960784,0.835294,0.6,0.835294,0.921569,0.772549,0.65,0.768627,0.901961,0.737255,0.7,0.670588,0.831373,0.654902,0.75,0.576471,0.760784,0.584314,0.8,0.498039,0.678431,0.521569,0.85,0.392157,0.560784,0.427451,0.9,0.294118,0.45098,0.333333,0.95,0.211765,0.34902,0.254902,1,0.152941,0.278431,0.196078]},{"ColorSpace":"Lab","Creator":"Francesca Samsel","Name":"Green-Blue Asymmetric Divergent (62Blbc)","NanColor":[0.25,0,0],"RGBPoints":[0,0.121569,0.2,0.145098,0.05,0.196078,0.301961,0.223529,0.1,0.258824,0.4,0.278431,0.2,0.341176,0.54902,0.341176,0.25,0.419608,0.619608,0.376471,0.3,0.545098,0.701961,0.392157,0.35,0.643137,0.780392,0.403922,0.4,0.729412,0.819608,0.45098,0.45,0.811765,0.870588,0.521569,0.5,0.898039,0.909804,0.564706,0.55,0.941176,0.92549,0.686275,0.6,0.960784,0.94902,0.776471,0.64,1,1,1,0.65,0.890196,0.988235,0.972549,0.7,0.721569,0.894118,0.901961,0.75,0.631373,0.823529,0.839216,0.8,0.517647,0.662745,0.701961,0.85,0.384314,0.494118,0.54902,0.9,0.298039,0.360784,0.45098,0.95,0.223529,0.25098,0.34902,0.99,0.156863,0.172549,0.25098,1,0.137255,0.137255,0.188235]},{"ColorSpace":"Lab","Creator":"Francesca Samsel","Name":"Asymmtrical Earth Tones (6_21b)","NanColor":[0.25,0,0],"RGBPoints":[0,0.141176,0.14902,0.2,0.05,0.215686,0.258824,0.321569,0.1,0.243137,0.368627,0.380392,0.15,0.27451,0.439216,0.4,0.2,0.32549,0.501961,0.384314,0.25,0.403922,0.6,0.419608,0.3,0.486275,0.701961,0.454902,0.35,0.556863,0.74902,0.494118,0.4,0.670588,0.8,0.545098,0.5,0.854902,0.901961,0.631373,0.55,0.92549,0.941176,0.694118,0.6,0.960784,0.94902,0.776471,0.65,0.988235,0.968627,0.909804,0.7,0.839216,0.815686,0.772549,0.75,0.701961,0.662745,0.615686,0.8,0.6,0.529412,0.478431,0.85,0.501961,0.403922,0.360784,0.9,0.439216,0.313725,0.290196,1,0.301961,0.164706,0.176471]},{"ColorSpace":"Lab","Creator":"Francesca Samsel","Name":"Yellow 15","NanColor":[0.25,0,0],"RGBPoints":[0,1,1,0.988235,0.002,1,1,0.988235,0.05,0.984314,0.988235,0.843137,0.1,0.988235,0.988235,0.741176,0.15,0.980392,0.968627,0.654902,0.2,0.980392,0.945098,0.576471,0.25,0.968627,0.905882,0.486275,0.3,0.968627,0.862745,0.388235,0.35,0.960784,0.803922,0.286275,0.4,0.94902,0.741176,0.219608,0.45,0.941176,0.678431,0.14902,0.5,0.929412,0.607843,0.094118,0.55,0.921569,0.545098,0.054902,0.6,0.909804,0.486275,0.035294,0.65,0.890196,0.411765,0.019608,0.7,0.8,0.305882,0,0.75,0.760784,0.239216,0,0.8,0.678431,0.180392,0.011765,0.85,0.6,0.121569,0.023529,0.9,0.501961,0.054902,0.031373,0.95,0.4,0.039216,0.058824,1,0.301961,0.047059,0.090196]},{"ColorSpace":"Diverging","Name":"Magma (matplotlib)","NanColor":[0,1,0],"Source":"https://github.com/BIDS/colormap/blob/master/colormaps.py","License":"CC0","Creator":"Nathaniel J. Smith & Stefan van der Walt","RGBPoints":[0,0.001462,0.000466,0.013866,0.003922,0.002258,0.001295,0.018331,0.007843,0.003279,0.002305,0.023708,0.011765,0.004512,0.00349,0.029965,0.015686,0.00595,0.004843,0.03713,0.019608,0.007588,0.006356,0.044973,0.023529,0.009426,0.008022,0.052844,0.027451,0.011465,0.009828,0.06075,0.031373,0.013708,0.011771,0.068667,0.035294,0.016156,0.01384,0.076603,0.039216,0.018815,0.016026,0.084584,0.043137,0.021692,0.01832,0.09261,0.047059,0.024792,0.020715,0.100676,0.05098,0.028123,0.023201,0.108787,0.054902,0.031696,0.025765,0.116965,0.058824,0.03552,0.028397,0.125209,0.062745,0.039608,0.03109,0.133515,0.066667,0.04383,0.03383,0.141886,0.070588,0.048062,0.036607,0.150327,0.07451,0.05232,0.039407,0.158841,0.078431,0.056615,0.04216,0.167446,0.082353,0.060949,0.044794,0.176129,0.086275,0.06533,0.047318,0.184892,0.090196,0.069764,0.049726,0.193735,0.094118,0.074257,0.052017,0.20266,0.098039,0.078815,0.054184,0.211667,0.101961,0.083446,0.056225,0.220755,0.105882,0.088155,0.058133,0.229922,0.109804,0.092949,0.059904,0.239164,0.113725,0.097833,0.061531,0.248477,0.117647,0.102815,0.06301,0.257854,0.121569,0.107899,0.064335,0.267289,0.12549,0.113094,0.065492,0.276784,0.129412,0.118405,0.066479,0.286321,0.133333,0.123833,0.067295,0.295879,0.137255,0.12938,0.067935,0.305443,0.141176,0.135053,0.068391,0.315,0.145098,0.140858,0.068654,0.324538,0.14902,0.146785,0.068738,0.334011,0.152941,0.152839,0.068637,0.343404,0.156863,0.159018,0.068354,0.352688,0.160784,0.165308,0.067911,0.361816,0.164706,0.171713,0.067305,0.370771,0.168627,0.178212,0.066576,0.379497,0.172549,0.184801,0.065732,0.387973,0.176471,0.19146,0.064818,0.396152,0.180392,0.198177,0.063862,0.404009,0.184314,0.204935,0.062907,0.411514,0.188235,0.211718,0.061992,0.418647,0.192157,0.218512,0.061158,0.425392,0.196078,0.225302,0.060445,0.431742,0.2,0.232077,0.059889,0.437695,0.203922,0.238826,0.059517,0.443256,0.207843,0.245543,0.059352,0.448436,0.211765,0.25222,0.059415,0.453248,0.215686,0.258857,0.059706,0.45771,0.219608,0.265447,0.060237,0.46184,0.223529,0.271994,0.060994,0.46566,0.227451,0.278493,0.061978,0.46919,0.231373,0.284951,0.063168,0.472451,0.235294,0.291366,0.064553,0.475462,0.239216,0.29774,0.066117,0.478243,0.243137,0.304081,0.067835,0.480812,0.247059,0.310382,0.069702,0.483186,0.25098,0.316654,0.07169,0.48538,0.254902,0.322899,0.073782,0.487408,0.258824,0.329114,0.075972,0.489287,0.262745,0.335308,0.078236,0.491024,0.266667,0.341482,0.080564,0.492631,0.270588,0.347636,0.082946,0.494121,0.27451,0.353773,0.085373,0.495501,0.278431,0.359898,0.087831,0.496778,0.282353,0.366012,0.090314,0.49796,0.286275,0.372116,0.092816,0.499053,0.290196,0.378211,0.095332,0.500067,0.294118,0.384299,0.097855,0.501002,0.298039,0.390384,0.100379,0.501864,0.301961,0.396467,0.102902,0.502658,0.305882,0.402548,0.10542,0.503386,0.309804,0.408629,0.10793,0.504052,0.313725,0.414709,0.110431,0.504662,0.317647,0.420791,0.11292,0.505215,0.321569,0.426877,0.115395,0.505714,0.32549,0.432967,0.117855,0.50616,0.329412,0.439062,0.120298,0.506555,0.333333,0.445163,0.122724,0.506901,0.337255,0.451271,0.125132,0.507198,0.341176,0.457386,0.127522,0.507448,0.345098,0.463508,0.129893,0.507652,0.34902,0.46964,0.132245,0.507809,0.352941,0.47578,0.134577,0.507921,0.356863,0.481929,0.136891,0.507989,0.360784,0.488088,0.139186,0.508011,0.364706,0.494258,0.141462,0.507988,0.368627,0.500438,0.143719,0.50792,0.372549,0.506629,0.145958,0.507806,0.376471,0.512831,0.148179,0.507648,0.380392,0.519045,0.150383,0.507443,0.384314,0.52527,0.152569,0.507192,0.388235,0.531507,0.154739,0.506895,0.392157,0.537755,0.156894,0.506551,0.396078,0.544015,0.159033,0.506159,0.4,0.550287,0.161158,0.505719,0.403922,0.556571,0.163269,0.50523,0.407843,0.562866,0.165368,0.504692,0.411765,0.569172,0.167454,0.504105,0.415686,0.57549,0.16953,0.503466,0.419608,0.581819,0.171596,0.502777,0.423529,0.588158,0.173652,0.502035,0.427451,0.594508,0.175701,0.501241,0.431373,0.600868,0.177743,0.500394,0.435294,0.607238,0.179779,0.499492,0.439216,0.613617,0.181811,0.498536,0.443137,0.620005,0.18384,0.497524,0.447059,0.626401,0.185867,0.496456,0.45098,0.632805,0.187893,0.495332,0.454902,0.639216,0.189921,0.49415,0.458824,0.645633,0.191952,0.49291,0.462745,0.652056,0.193986,0.491611,0.466667,0.658483,0.196027,0.490253,0.470588,0.664915,0.198075,0.488836,0.47451,0.671349,0.200133,0.487358,0.478431,0.677786,0.202203,0.485819,0.482353,0.684224,0.204286,0.484219,0.486275,0.690661,0.206384,0.482558,0.490196,0.697098,0.208501,0.480835,0.494118,0.703532,0.210638,0.479049,0.498039,0.709962,0.212797,0.477201,0.501961,0.716387,0.214982,0.47529,0.505882,0.722805,0.217194,0.473316,0.509804,0.729216,0.219437,0.471279,0.513725,0.735616,0.221713,0.46918,0.517647,0.742004,0.224025,0.467018,0.521569,0.748378,0.226377,0.464794,0.52549,0.754737,0.228772,0.462509,0.529412,0.761077,0.231214,0.460162,0.533333,0.767398,0.233705,0.457755,0.537255,0.773695,0.236249,0.455289,0.541176,0.779968,0.238851,0.452765,0.545098,0.786212,0.241514,0.450184,0.54902,0.792427,0.244242,0.447543,0.552941,0.798608,0.24704,0.444848,0.556863,0.804752,0.249911,0.442102,0.560784,0.810855,0.252861,0.439305,0.564706,0.816914,0.255895,0.436461,0.568627,0.822926,0.259016,0.433573,0.572549,0.828886,0.262229,0.430644,0.576471,0.834791,0.26554,0.427671,0.580392,0.840636,0.268953,0.424666,0.584314,0.846416,0.272473,0.421631,0.588235,0.852126,0.276106,0.418573,0.592157,0.857763,0.279857,0.415496,0.596078,0.86332,0.283729,0.412403,0.6,0.868793,0.287728,0.409303,0.603922,0.874176,0.291859,0.406205,0.607843,0.879464,0.296125,0.403118,0.611765,0.884651,0.30053,0.400047,0.615686,0.889731,0.305079,0.397002,0.619608,0.8947,0.309773,0.393995,0.623529,0.899552,0.314616,0.391037,0.627451,0.904281,0.31961,0.388137,0.631373,0.908884,0.324755,0.385308,0.635294,0.913354,0.330052,0.382563,0.639216,0.917689,0.3355,0.379915,0.643137,0.921884,0.341098,0.377376,0.647059,0.925937,0.346844,0.374959,0.65098,0.929845,0.352734,0.372677,0.654902,0.933606,0.358764,0.370541,0.658824,0.937221,0.364929,0.368567,0.662745,0.940687,0.371224,0.366762,0.666667,0.944006,0.377643,0.365136,0.670588,0.94718,0.384178,0.363701,0.67451,0.95021,0.39082,0.362468,0.678431,0.953099,0.397563,0.361438,0.682353,0.955849,0.4044,0.360619,0.686275,0.958464,0.411324,0.360014,0.690196,0.960949,0.418323,0.35963,0.694118,0.96331,0.42539,0.359469,0.698039,0.965549,0.432519,0.359529,0.701961,0.967671,0.439703,0.35981,0.705882,0.96968,0.446936,0.360311,0.709804,0.971582,0.45421,0.36103,0.713725,0.973381,0.46152,0.361965,0.717647,0.975082,0.468861,0.363111,0.721569,0.97669,0.476226,0.364466,0.72549,0.97821,0.483612,0.366025,0.729412,0.979645,0.491014,0.367783,0.733333,0.981,0.498428,0.369734,0.737255,0.982279,0.505851,0.371874,0.741176,0.983485,0.51328,0.374198,0.745098,0.984622,0.520713,0.376698,0.74902,0.985693,0.528148,0.379371,0.752941,0.9867,0.535582,0.38221,0.756863,0.987646,0.543015,0.38521,0.760784,0.988533,0.550446,0.388365,0.764706,0.989363,0.557873,0.391671,0.768627,0.990138,0.565296,0.395122,0.772549,0.990871,0.572706,0.398714,0.776471,0.991558,0.580107,0.402441,0.780392,0.992196,0.587502,0.406299,0.784314,0.992785,0.594891,0.410283,0.788235,0.993326,0.602275,0.41439,0.792157,0.993834,0.609644,0.418613,0.796078,0.994309,0.616999,0.42295,0.8,0.994738,0.62435,0.427397,0.803922,0.995122,0.631696,0.431951,0.807843,0.99548,0.639027,0.436607,0.811765,0.99581,0.646344,0.441361,0.815686,0.996096,0.653659,0.446213,0.819608,0.996341,0.660969,0.45116,0.823529,0.99658,0.668256,0.456192,0.827451,0.996775,0.675541,0.461314,0.831373,0.996925,0.682828,0.466526,0.835294,0.997077,0.690088,0.471811,0.839216,0.997186,0.697349,0.477182,0.843137,0.997254,0.704611,0.482635,0.847059,0.997325,0.711848,0.488154,0.85098,0.997351,0.719089,0.493755,0.854902,0.997351,0.726324,0.499428,0.858824,0.997341,0.733545,0.505167,0.862745,0.997285,0.740772,0.510983,0.866667,0.997228,0.747981,0.516859,0.870588,0.997138,0.75519,0.522806,0.87451,0.997019,0.762398,0.528821,0.878431,0.996898,0.769591,0.534892,0.882353,0.996727,0.776795,0.541039,0.886275,0.996571,0.783977,0.547233,0.890196,0.996369,0.791167,0.553499,0.894118,0.996162,0.798348,0.55982,0.898039,0.995932,0.805527,0.566202,0.901961,0.99568,0.812706,0.572645,0.905882,0.995424,0.819875,0.57914,0.909804,0.995131,0.827052,0.585701,0.913725,0.994851,0.834213,0.592307,0.917647,0.994524,0.841387,0.598983,0.921569,0.994222,0.84854,0.605696,0.92549,0.993866,0.855711,0.612482,0.929412,0.993545,0.862859,0.619299,0.933333,0.99317,0.870024,0.626189,0.937255,0.992831,0.877168,0.633109,0.941176,0.99244,0.88433,0.640099,0.945098,0.992089,0.89147,0.647116,0.94902,0.991688,0.898627,0.654202,0.952941,0.991332,0.905763,0.661309,0.956863,0.99093,0.912915,0.668481,0.960784,0.99057,0.920049,0.675675,0.964706,0.990175,0.927196,0.682926,0.968627,0.989815,0.934329,0.690198,0.972549,0.989434,0.94147,0.697519,0.976471,0.989077,0.948604,0.704863,0.980392,0.988717,0.955742,0.712242,0.984314,0.988367,0.962878,0.719649,0.988235,0.988033,0.970012,0.727077,0.992157,0.987691,0.977154,0.734536,0.996078,0.987387,0.984288,0.742002,1,0.987053,0.991438,0.749504]},{"ColorSpace":"Diverging","Name":"Inferno (matplotlib)","NanColor":[0,1,0],"Source":"https://github.com/BIDS/colormap/blob/master/colormaps.py","License":"CC0","Creator":"Nathaniel J. Smith & Stefan van der Walt","RGBPoints":[0,0.001462,0.000466,0.013866,0.003922,0.002267,0.00127,0.01857,0.007843,0.003299,0.002249,0.024239,0.011765,0.004547,0.003392,0.030909,0.015686,0.006006,0.004692,0.038558,0.019608,0.007676,0.006136,0.046836,0.023529,0.009561,0.007713,0.055143,0.027451,0.011663,0.009417,0.06346,0.031373,0.013995,0.011225,0.071862,0.035294,0.016561,0.013136,0.080282,0.039216,0.019373,0.015133,0.088767,0.043137,0.022447,0.017199,0.097327,0.047059,0.025793,0.019331,0.10593,0.05098,0.029432,0.021503,0.114621,0.054902,0.033385,0.023702,0.123397,0.058824,0.037668,0.025921,0.132232,0.062745,0.042253,0.028139,0.141141,0.066667,0.046915,0.030324,0.150164,0.070588,0.051644,0.032474,0.159254,0.07451,0.056449,0.034569,0.168414,0.078431,0.06134,0.03659,0.177642,0.082353,0.066331,0.038504,0.186962,0.086275,0.071429,0.040294,0.196354,0.090196,0.076637,0.041905,0.205799,0.094118,0.081962,0.043328,0.215289,0.098039,0.087411,0.044556,0.224813,0.101961,0.09299,0.045583,0.234358,0.105882,0.098702,0.046402,0.243904,0.109804,0.104551,0.047008,0.25343,0.113725,0.110536,0.047399,0.262912,0.117647,0.116656,0.047574,0.272321,0.121569,0.122908,0.047536,0.281624,0.12549,0.129285,0.047293,0.290788,0.129412,0.135778,0.046856,0.299776,0.133333,0.142378,0.046242,0.308553,0.137255,0.149073,0.045468,0.317085,0.141176,0.15585,0.044559,0.325338,0.145098,0.162689,0.043554,0.333277,0.14902,0.169575,0.042489,0.340874,0.152941,0.176493,0.041402,0.348111,0.156863,0.183429,0.040329,0.354971,0.160784,0.190367,0.039309,0.361447,0.164706,0.197297,0.0384,0.367535,0.168627,0.204209,0.037632,0.373238,0.172549,0.211095,0.03703,0.378563,0.176471,0.217949,0.036615,0.383522,0.180392,0.224763,0.036405,0.388129,0.184314,0.231538,0.036405,0.3924,0.188235,0.238273,0.036621,0.396353,0.192157,0.244967,0.037055,0.400007,0.196078,0.25162,0.037705,0.403378,0.2,0.258234,0.038571,0.406485,0.203922,0.26481,0.039647,0.409345,0.207843,0.271347,0.040922,0.411976,0.211765,0.27785,0.042353,0.414392,0.215686,0.284321,0.043933,0.416608,0.219608,0.290763,0.045644,0.418637,0.223529,0.297178,0.04747,0.420491,0.227451,0.303568,0.049396,0.422182,0.231373,0.309935,0.051407,0.423721,0.235294,0.316282,0.05349,0.425116,0.239216,0.32261,0.055634,0.426377,0.243137,0.328921,0.057827,0.427511,0.247059,0.335217,0.06006,0.428524,0.25098,0.3415,0.062325,0.429425,0.254902,0.347771,0.064616,0.430217,0.258824,0.354032,0.066925,0.430906,0.262745,0.360284,0.069247,0.431497,0.266667,0.366529,0.071579,0.431994,0.270588,0.372768,0.073915,0.4324,0.27451,0.379001,0.076253,0.432719,0.278431,0.385228,0.078591,0.432955,0.282353,0.391453,0.080927,0.433109,0.286275,0.397674,0.083257,0.433183,0.290196,0.403894,0.08558,0.433179,0.294118,0.410113,0.087896,0.433098,0.298039,0.416331,0.090203,0.432943,0.301961,0.422549,0.092501,0.432714,0.305882,0.428768,0.09479,0.432412,0.309804,0.434987,0.097069,0.432039,0.313725,0.441207,0.099338,0.431594,0.317647,0.447428,0.101597,0.43108,0.321569,0.453651,0.103848,0.430498,0.32549,0.459875,0.106089,0.429846,0.329412,0.4661,0.108322,0.429125,0.333333,0.472328,0.110547,0.428334,0.337255,0.478558,0.112764,0.427475,0.341176,0.484789,0.114974,0.426548,0.345098,0.491022,0.117179,0.425552,0.34902,0.497257,0.119379,0.424488,0.352941,0.503493,0.121575,0.423356,0.356863,0.50973,0.123769,0.422156,0.360784,0.515967,0.12596,0.420887,0.364706,0.522206,0.12815,0.419549,0.368627,0.528444,0.130341,0.418142,0.372549,0.534683,0.132534,0.416667,0.376471,0.54092,0.134729,0.415123,0.380392,0.547157,0.136929,0.413511,0.384314,0.553392,0.139134,0.411829,0.388235,0.559624,0.141346,0.410078,0.392157,0.565854,0.143567,0.408258,0.396078,0.572081,0.145797,0.406369,0.4,0.578304,0.148039,0.404411,0.403922,0.584521,0.150294,0.402385,0.407843,0.590734,0.152563,0.40029,0.411765,0.59694,0.154848,0.398125,0.415686,0.603139,0.157151,0.395891,0.419608,0.60933,0.159474,0.393589,0.423529,0.615513,0.161817,0.391219,0.427451,0.621685,0.164184,0.388781,0.431373,0.627847,0.166575,0.386276,0.435294,0.633998,0.168992,0.383704,0.439216,0.640135,0.171438,0.381065,0.443137,0.64626,0.173914,0.378359,0.447059,0.652369,0.176421,0.375586,0.45098,0.658463,0.178962,0.372748,0.454902,0.66454,0.181539,0.369846,0.458824,0.670599,0.184153,0.366879,0.462745,0.676638,0.186807,0.363849,0.466667,0.682656,0.189501,0.360757,0.470588,0.688653,0.192239,0.357603,0.47451,0.694627,0.195021,0.354388,0.478431,0.700576,0.197851,0.351113,0.482353,0.7065,0.200728,0.347777,0.486275,0.712396,0.203656,0.344383,0.490196,0.718264,0.206636,0.340931,0.494118,0.724103,0.20967,0.337424,0.498039,0.729909,0.212759,0.333861,0.501961,0.735683,0.215906,0.330245,0.505882,0.741423,0.219112,0.326576,0.509804,0.747127,0.222378,0.322856,0.513725,0.752794,0.225706,0.319085,0.517647,0.758422,0.229097,0.315266,0.521569,0.76401,0.232554,0.311399,0.52549,0.769556,0.236077,0.307485,0.529412,0.775059,0.239667,0.303526,0.533333,0.780517,0.243327,0.299523,0.537255,0.785929,0.247056,0.295477,0.541176,0.791293,0.250856,0.29139,0.545098,0.796607,0.254728,0.287264,0.54902,0.801871,0.258674,0.283099,0.552941,0.807082,0.262692,0.278898,0.556863,0.812239,0.266786,0.274661,0.560784,0.817341,0.270954,0.27039,0.564706,0.822386,0.275197,0.266085,0.568627,0.827372,0.279517,0.26175,0.572549,0.832299,0.283913,0.257383,0.576471,0.837165,0.288385,0.252988,0.580392,0.841969,0.292933,0.248564,0.584314,0.846709,0.297559,0.244113,0.588235,0.851384,0.30226,0.239636,0.592157,0.855992,0.307038,0.235133,0.596078,0.860533,0.311892,0.230606,0.6,0.865006,0.316822,0.226055,0.603922,0.869409,0.321827,0.221482,0.607843,0.873741,0.326906,0.216886,0.611765,0.878001,0.33206,0.212268,0.615686,0.882188,0.337287,0.207628,0.619608,0.886302,0.342586,0.202968,0.623529,0.890341,0.347957,0.198286,0.627451,0.894305,0.353399,0.193584,0.631373,0.898192,0.358911,0.18886,0.635294,0.902003,0.364492,0.184116,0.639216,0.905735,0.37014,0.17935,0.643137,0.90939,0.375856,0.174563,0.647059,0.912966,0.381636,0.169755,0.65098,0.916462,0.387481,0.164924,0.654902,0.919879,0.393389,0.16007,0.658824,0.923215,0.399359,0.155193,0.662745,0.92647,0.405389,0.150292,0.666667,0.929644,0.411479,0.145367,0.670588,0.932737,0.417627,0.140417,0.67451,0.935747,0.423831,0.13544,0.678431,0.938675,0.430091,0.130438,0.682353,0.941521,0.436405,0.125409,0.686275,0.944285,0.442772,0.120354,0.690196,0.946965,0.449191,0.115272,0.694118,0.949562,0.45566,0.110164,0.698039,0.952075,0.462178,0.105031,0.701961,0.954506,0.468744,0.099874,0.705882,0.956852,0.475356,0.094695,0.709804,0.959114,0.482014,0.089499,0.713725,0.961293,0.488716,0.084289,0.717647,0.963387,0.495462,0.079073,0.721569,0.965397,0.502249,0.073859,0.72549,0.967322,0.509078,0.068659,0.729412,0.969163,0.515946,0.063488,0.733333,0.970919,0.522853,0.058367,0.737255,0.97259,0.529798,0.053324,0.741176,0.974176,0.53678,0.048392,0.745098,0.975677,0.543798,0.043618,0.74902,0.977092,0.55085,0.03905,0.752941,0.978422,0.557937,0.034931,0.756863,0.979666,0.565057,0.031409,0.760784,0.980824,0.572209,0.028508,0.764706,0.981895,0.579392,0.02625,0.768627,0.982881,0.586606,0.024661,0.772549,0.983779,0.593849,0.02377,0.776471,0.984591,0.601122,0.023606,0.780392,0.985315,0.608422,0.024202,0.784314,0.985952,0.61575,0.025592,0.788235,0.986502,0.623105,0.027814,0.792157,0.986964,0.630485,0.030908,0.796078,0.987337,0.63789,0.034916,0.8,0.987622,0.64532,0.039886,0.803922,0.987819,0.652773,0.045581,0.807843,0.987926,0.66025,0.05175,0.811765,0.987945,0.667748,0.058329,0.815686,0.987874,0.675267,0.065257,0.819608,0.987714,0.682807,0.072489,0.823529,0.987464,0.690366,0.07999,0.827451,0.987124,0.697944,0.087731,0.831373,0.986694,0.70554,0.095694,0.835294,0.986175,0.713153,0.103863,0.839216,0.985566,0.720782,0.112229,0.843137,0.984865,0.728427,0.120785,0.847059,0.984075,0.736087,0.129527,0.85098,0.983196,0.743758,0.138453,0.854902,0.982228,0.751442,0.147565,0.858824,0.981173,0.759135,0.156863,0.862745,0.980032,0.766837,0.166353,0.866667,0.978806,0.774545,0.176037,0.870588,0.977497,0.782258,0.185923,0.87451,0.976108,0.789974,0.196018,0.878431,0.974638,0.797692,0.206332,0.882353,0.973088,0.805409,0.216877,0.886275,0.971468,0.813122,0.227658,0.890196,0.969783,0.820825,0.238686,0.894118,0.968041,0.828515,0.249972,0.898039,0.966243,0.836191,0.261534,0.901961,0.964394,0.843848,0.273391,0.905882,0.962517,0.851476,0.285546,0.909804,0.960626,0.859069,0.29801,0.913725,0.95872,0.866624,0.31082,0.917647,0.956834,0.874129,0.323974,0.921569,0.954997,0.881569,0.337475,0.92549,0.953215,0.888942,0.351369,0.929412,0.951546,0.896226,0.365627,0.933333,0.950018,0.903409,0.380271,0.937255,0.948683,0.910473,0.395289,0.941176,0.947594,0.917399,0.410665,0.945098,0.946809,0.924168,0.426373,0.94902,0.946392,0.930761,0.442367,0.952941,0.946403,0.937159,0.458592,0.956863,0.946903,0.943348,0.47497,0.960784,0.947937,0.949318,0.491426,0.964706,0.949545,0.955063,0.50786,0.968627,0.95174,0.960587,0.524203,0.972549,0.954529,0.965896,0.540361,0.976471,0.957896,0.971003,0.556275,0.980392,0.961812,0.975924,0.571925,0.984314,0.966249,0.980678,0.587206,0.988235,0.971162,0.985282,0.602154,0.992157,0.976511,0.989753,0.61676,0.996078,0.982257,0.994109,0.631017,1,0.988362,0.998364,0.644924]},{"ColorSpace":"Diverging","Name":"Plasma (matplotlib)","NanColor":[0,1,0],"Source":"https://github.com/BIDS/colormap/blob/master/colormaps.py","License":"CC0","Creator":"Nathaniel J. Smith & Stefan van der Walt","RGBPoints":[0,0.050383,0.029803,0.527975,0.003922,0.063536,0.028426,0.533124,0.007843,0.075353,0.027206,0.538007,0.011765,0.086222,0.026125,0.542658,0.015686,0.096379,0.025165,0.547103,0.019608,0.10598,0.024309,0.551368,0.023529,0.115124,0.023556,0.555468,0.027451,0.123903,0.022878,0.559423,0.031373,0.132381,0.022258,0.56325,0.035294,0.140603,0.021687,0.566959,0.039216,0.148607,0.021154,0.570562,0.043137,0.156421,0.020651,0.574065,0.047059,0.16407,0.020171,0.577478,0.05098,0.171574,0.019706,0.580806,0.054902,0.17895,0.019252,0.584054,0.058824,0.186213,0.018803,0.587228,0.062745,0.193374,0.018354,0.59033,0.066667,0.200445,0.017902,0.593364,0.070588,0.207435,0.017442,0.596333,0.07451,0.21435,0.016973,0.599239,0.078431,0.221197,0.016497,0.602083,0.082353,0.227983,0.016007,0.604867,0.086275,0.234715,0.015502,0.607592,0.090196,0.241396,0.014979,0.610259,0.094118,0.248032,0.014439,0.612868,0.098039,0.254627,0.013882,0.615419,0.101961,0.261183,0.013308,0.617911,0.105882,0.267703,0.012716,0.620346,0.109804,0.274191,0.012109,0.622722,0.113725,0.280648,0.011488,0.625038,0.117647,0.287076,0.010855,0.627295,0.121569,0.293478,0.010213,0.62949,0.12549,0.299855,0.009561,0.631624,0.129412,0.30621,0.008902,0.633694,0.133333,0.312543,0.008239,0.6357,0.137255,0.318856,0.007576,0.63764,0.141176,0.32515,0.006915,0.639512,0.145098,0.331426,0.006261,0.641316,0.14902,0.337683,0.005618,0.643049,0.152941,0.343925,0.004991,0.64471,0.156863,0.35015,0.004382,0.646298,0.160784,0.356359,0.003798,0.64781,0.164706,0.362553,0.003243,0.649245,0.168627,0.368733,0.002724,0.650601,0.172549,0.374897,0.002245,0.651876,0.176471,0.381047,0.001814,0.653068,0.180392,0.387183,0.001434,0.654177,0.184314,0.393304,0.001114,0.655199,0.188235,0.399411,0.000859,0.656133,0.192157,0.405503,0.000678,0.656977,0.196078,0.41158,0.000577,0.65773,0.2,0.417642,0.000564,0.65839,0.203922,0.423689,0.000646,0.658956,0.207843,0.429719,0.000831,0.659425,0.211765,0.435734,0.001127,0.659797,0.215686,0.441732,0.00154,0.660069,0.219608,0.447714,0.00208,0.66024,0.223529,0.453677,0.002755,0.66031,0.227451,0.459623,0.003574,0.660277,0.231373,0.46555,0.004545,0.660139,0.235294,0.471457,0.005678,0.659897,0.239216,0.477344,0.00698,0.659549,0.243137,0.48321,0.00846,0.659095,0.247059,0.489055,0.010127,0.658534,0.25098,0.494877,0.01199,0.657865,0.254902,0.500678,0.014055,0.657088,0.258824,0.506454,0.016333,0.656202,0.262745,0.512206,0.018833,0.655209,0.266667,0.517933,0.021563,0.654109,0.270588,0.523633,0.024532,0.652901,0.27451,0.529306,0.027747,0.651586,0.278431,0.534952,0.031217,0.650165,0.282353,0.54057,0.03495,0.64864,0.286275,0.546157,0.038954,0.64701,0.290196,0.551715,0.043136,0.645277,0.294118,0.557243,0.047331,0.643443,0.298039,0.562738,0.051545,0.641509,0.301961,0.568201,0.055778,0.639477,0.305882,0.573632,0.060028,0.637349,0.309804,0.579029,0.064296,0.635126,0.313725,0.584391,0.068579,0.632812,0.317647,0.589719,0.072878,0.630408,0.321569,0.595011,0.07719,0.627917,0.32549,0.600266,0.081516,0.625342,0.329412,0.605485,0.085854,0.622686,0.333333,0.610667,0.090204,0.619951,0.337255,0.615812,0.094564,0.61714,0.341176,0.620919,0.098934,0.614257,0.345098,0.625987,0.103312,0.611305,0.34902,0.631017,0.107699,0.608287,0.352941,0.636008,0.112092,0.605205,0.356863,0.640959,0.116492,0.602065,0.360784,0.645872,0.120898,0.598867,0.364706,0.650746,0.125309,0.595617,0.368627,0.65558,0.129725,0.592317,0.372549,0.660374,0.134144,0.588971,0.376471,0.665129,0.138566,0.585582,0.380392,0.669845,0.142992,0.582154,0.384314,0.674522,0.147419,0.578688,0.388235,0.67916,0.151848,0.575189,0.392157,0.683758,0.156278,0.57166,0.396078,0.688318,0.160709,0.568103,0.4,0.69284,0.165141,0.564522,0.403922,0.697324,0.169573,0.560919,0.407843,0.701769,0.174005,0.557296,0.411765,0.706178,0.178437,0.553657,0.415686,0.710549,0.182868,0.550004,0.419608,0.714883,0.187299,0.546338,0.423529,0.719181,0.191729,0.542663,0.427451,0.723444,0.196158,0.538981,0.431373,0.72767,0.200586,0.535293,0.435294,0.731862,0.205013,0.531601,0.439216,0.736019,0.209439,0.527908,0.443137,0.740143,0.213864,0.524216,0.447059,0.744232,0.218288,0.520524,0.45098,0.748289,0.222711,0.516834,0.454902,0.752312,0.227133,0.513149,0.458824,0.756304,0.231555,0.509468,0.462745,0.760264,0.235976,0.505794,0.466667,0.764193,0.240396,0.502126,0.470588,0.76809,0.244817,0.498465,0.47451,0.771958,0.249237,0.494813,0.478431,0.775796,0.253658,0.491171,0.482353,0.779604,0.258078,0.487539,0.486275,0.783383,0.2625,0.483918,0.490196,0.787133,0.266922,0.480307,0.494118,0.790855,0.271345,0.476706,0.498039,0.794549,0.27577,0.473117,0.501961,0.798216,0.280197,0.469538,0.505882,0.801855,0.284626,0.465971,0.509804,0.805467,0.289057,0.462415,0.513725,0.809052,0.293491,0.45887,0.517647,0.812612,0.297928,0.455338,0.521569,0.816144,0.302368,0.451816,0.52549,0.819651,0.306812,0.448306,0.529412,0.823132,0.311261,0.444806,0.533333,0.826588,0.315714,0.441316,0.537255,0.830018,0.320172,0.437836,0.541176,0.833422,0.324635,0.434366,0.545098,0.836801,0.329105,0.430905,0.54902,0.840155,0.33358,0.427455,0.552941,0.843484,0.338062,0.424013,0.556863,0.846788,0.342551,0.420579,0.560784,0.850066,0.347048,0.417153,0.564706,0.853319,0.351553,0.413734,0.568627,0.856547,0.356066,0.410322,0.572549,0.85975,0.360588,0.406917,0.576471,0.862927,0.365119,0.403519,0.580392,0.866078,0.36966,0.400126,0.584314,0.869203,0.374212,0.396738,0.588235,0.872303,0.378774,0.393355,0.592157,0.875376,0.383347,0.389976,0.596078,0.878423,0.387932,0.3866,0.6,0.881443,0.392529,0.383229,0.603922,0.884436,0.397139,0.37986,0.607843,0.887402,0.401762,0.376494,0.611765,0.89034,0.406398,0.37313,0.615686,0.89325,0.411048,0.369768,0.619608,0.896131,0.415712,0.366407,0.623529,0.898984,0.420392,0.363047,0.627451,0.901807,0.425087,0.359688,0.631373,0.904601,0.429797,0.356329,0.635294,0.907365,0.434524,0.35297,0.639216,0.910098,0.439268,0.34961,0.643137,0.9128,0.444029,0.346251,0.647059,0.915471,0.448807,0.34289,0.65098,0.918109,0.453603,0.339529,0.654902,0.920714,0.458417,0.336166,0.658824,0.923287,0.463251,0.332801,0.662745,0.925825,0.468103,0.329435,0.666667,0.928329,0.472975,0.326067,0.670588,0.930798,0.477867,0.322697,0.67451,0.933232,0.48278,0.319325,0.678431,0.93563,0.487712,0.315952,0.682353,0.93799,0.492667,0.312575,0.686275,0.940313,0.497642,0.309197,0.690196,0.942598,0.502639,0.305816,0.694118,0.944844,0.507658,0.302433,0.698039,0.947051,0.512699,0.299049,0.701961,0.949217,0.517763,0.295662,0.705882,0.951344,0.52285,0.292275,0.709804,0.953428,0.52796,0.288883,0.713725,0.95547,0.533093,0.28549,0.717647,0.957469,0.53825,0.282096,0.721569,0.959424,0.543431,0.278701,0.72549,0.961336,0.548636,0.275305,0.729412,0.963203,0.553865,0.271909,0.733333,0.965024,0.559118,0.268513,0.737255,0.966798,0.564396,0.265118,0.741176,0.968526,0.5697,0.261721,0.745098,0.970205,0.575028,0.258325,0.74902,0.971835,0.580382,0.254931,0.752941,0.973416,0.585761,0.25154,0.756863,0.974947,0.591165,0.248151,0.760784,0.976428,0.596595,0.244767,0.764706,0.977856,0.602051,0.241387,0.768627,0.979233,0.607532,0.238013,0.772549,0.980556,0.613039,0.234646,0.776471,0.981826,0.618572,0.231287,0.780392,0.983041,0.624131,0.227937,0.784314,0.984199,0.629718,0.224595,0.788235,0.985301,0.63533,0.221265,0.792157,0.986345,0.640969,0.217948,0.796078,0.987332,0.646633,0.214648,0.8,0.98826,0.652325,0.211364,0.803922,0.989128,0.658043,0.2081,0.807843,0.989935,0.663787,0.204859,0.811765,0.990681,0.669558,0.201642,0.815686,0.991365,0.675355,0.198453,0.819608,0.991985,0.681179,0.195295,0.823529,0.992541,0.68703,0.19217,0.827451,0.993032,0.692907,0.189084,0.831373,0.993456,0.69881,0.186041,0.835294,0.993814,0.704741,0.183043,0.839216,0.994103,0.710698,0.180097,0.843137,0.994324,0.716681,0.177208,0.847059,0.994474,0.722691,0.174381,0.85098,0.994553,0.728728,0.171622,0.854902,0.994561,0.734791,0.168938,0.858824,0.994495,0.74088,0.166335,0.862745,0.994355,0.746995,0.163821,0.866667,0.994141,0.753137,0.161404,0.870588,0.993851,0.759304,0.159092,0.87451,0.993482,0.765499,0.156891,0.878431,0.993033,0.77172,0.154808,0.882353,0.992505,0.777967,0.152855,0.886275,0.991897,0.784239,0.151042,0.890196,0.991209,0.790537,0.149377,0.894118,0.990439,0.796859,0.14787,0.898039,0.989587,0.803205,0.146529,0.901961,0.988648,0.809579,0.145357,0.905882,0.987621,0.815978,0.144363,0.909804,0.986509,0.822401,0.143557,0.913725,0.985314,0.828846,0.142945,0.917647,0.984031,0.835315,0.142528,0.921569,0.982653,0.841812,0.142303,0.92549,0.98119,0.848329,0.142279,0.929412,0.979644,0.854866,0.142453,0.933333,0.977995,0.861432,0.142808,0.937255,0.976265,0.868016,0.143351,0.941176,0.974443,0.874622,0.144061,0.945098,0.97253,0.88125,0.144923,0.94902,0.970533,0.887896,0.145919,0.952941,0.968443,0.894564,0.147014,0.956863,0.966271,0.901249,0.14818,0.960784,0.964021,0.90795,0.14937,0.964706,0.961681,0.914672,0.15052,0.968627,0.959276,0.921407,0.151566,0.972549,0.956808,0.928152,0.152409,0.976471,0.954287,0.934908,0.152921,0.980392,0.951726,0.941671,0.152925,0.984314,0.949151,0.948435,0.152178,0.988235,0.946602,0.95519,0.150328,0.992157,0.944152,0.961916,0.146861,0.996078,0.941896,0.96859,0.140956,1,0.940015,0.975158,0.131326]},{"ColorSpace":"Diverging","Name":"Viridis (matplotlib)","NanColor":[1,0,0],"Source":"https://github.com/BIDS/colormap/blob/master/colormaps.py","License":"CC0","Creator":"Eric Firing","RGBPoints":[0,0.267004,0.004874,0.329415,0.003922,0.26851,0.009605,0.335427,0.007843,0.269944,0.014625,0.341379,0.011765,0.271305,0.019942,0.347269,0.015686,0.272594,0.025563,0.353093,0.019608,0.273809,0.031497,0.358853,0.023529,0.274952,0.037752,0.364543,0.027451,0.276022,0.044167,0.370164,0.031373,0.277018,0.050344,0.375715,0.035294,0.277941,0.056324,0.381191,0.039216,0.278791,0.062145,0.386592,0.043137,0.279566,0.067836,0.391917,0.047059,0.280267,0.073417,0.397163,0.05098,0.280894,0.078907,0.402329,0.054902,0.281446,0.08432,0.407414,0.058824,0.281924,0.089666,0.412415,0.062745,0.282327,0.094955,0.417331,0.066667,0.282656,0.100196,0.42216,0.070588,0.28291,0.105393,0.426902,0.07451,0.283091,0.110553,0.431554,0.078431,0.283197,0.11568,0.436115,0.082353,0.283229,0.120777,0.440584,0.086275,0.283187,0.125848,0.44496,0.090196,0.283072,0.130895,0.449241,0.094118,0.282884,0.13592,0.453427,0.098039,0.282623,0.140926,0.457517,0.101961,0.28229,0.145912,0.46151,0.105882,0.281887,0.150881,0.465405,0.109804,0.281412,0.155834,0.469201,0.113725,0.280868,0.160771,0.472899,0.117647,0.280255,0.165693,0.476498,0.121569,0.279574,0.170599,0.479997,0.12549,0.278826,0.17549,0.483397,0.129412,0.278012,0.180367,0.486697,0.133333,0.277134,0.185228,0.489898,0.137255,0.276194,0.190074,0.493001,0.141176,0.275191,0.194905,0.496005,0.145098,0.274128,0.199721,0.498911,0.14902,0.273006,0.20452,0.501721,0.152941,0.271828,0.209303,0.504434,0.156863,0.270595,0.214069,0.507052,0.160784,0.269308,0.218818,0.509577,0.164706,0.267968,0.223549,0.512008,0.168627,0.26658,0.228262,0.514349,0.172549,0.265145,0.232956,0.516599,0.176471,0.263663,0.237631,0.518762,0.180392,0.262138,0.242286,0.520837,0.184314,0.260571,0.246922,0.522828,0.188235,0.258965,0.251537,0.524736,0.192157,0.257322,0.25613,0.526563,0.196078,0.255645,0.260703,0.528312,0.2,0.253935,0.265254,0.529983,0.203922,0.252194,0.269783,0.531579,0.207843,0.250425,0.27429,0.533103,0.211765,0.248629,0.278775,0.534556,0.215686,0.246811,0.283237,0.535941,0.219608,0.244972,0.287675,0.53726,0.223529,0.243113,0.292092,0.538516,0.227451,0.241237,0.296485,0.539709,0.231373,0.239346,0.300855,0.540844,0.235294,0.237441,0.305202,0.541921,0.239216,0.235526,0.309527,0.542944,0.243137,0.233603,0.313828,0.543914,0.247059,0.231674,0.318106,0.544834,0.25098,0.229739,0.322361,0.545706,0.254902,0.227802,0.326594,0.546532,0.258824,0.225863,0.330805,0.547314,0.262745,0.223925,0.334994,0.548053,0.266667,0.221989,0.339161,0.548752,0.270588,0.220057,0.343307,0.549413,0.27451,0.21813,0.347432,0.550038,0.278431,0.21621,0.351535,0.550627,0.282353,0.214298,0.355619,0.551184,0.286275,0.212395,0.359683,0.55171,0.290196,0.210503,0.363727,0.552206,0.294118,0.208623,0.367752,0.552675,0.298039,0.206756,0.371758,0.553117,0.301961,0.204903,0.375746,0.553533,0.305882,0.203063,0.379716,0.553925,0.309804,0.201239,0.38367,0.554294,0.313725,0.19943,0.387607,0.554642,0.317647,0.197636,0.391528,0.554969,0.321569,0.19586,0.395433,0.555276,0.32549,0.1941,0.399323,0.555565,0.329412,0.192357,0.403199,0.555836,0.333333,0.190631,0.407061,0.556089,0.337255,0.188923,0.41091,0.556326,0.341176,0.187231,0.414746,0.556547,0.345098,0.185556,0.41857,0.556753,0.34902,0.183898,0.422383,0.556944,0.352941,0.182256,0.426184,0.55712,0.356863,0.180629,0.429975,0.557282,0.360784,0.179019,0.433756,0.55743,0.364706,0.177423,0.437527,0.557565,0.368627,0.175841,0.44129,0.557685,0.372549,0.174274,0.445044,0.557792,0.376471,0.172719,0.448791,0.557885,0.380392,0.171176,0.45253,0.557965,0.384314,0.169646,0.456262,0.55803,0.388235,0.168126,0.459988,0.558082,0.392157,0.166617,0.463708,0.558119,0.396078,0.165117,0.467423,0.558141,0.4,0.163625,0.471133,0.558148,0.403922,0.162142,0.474838,0.55814,0.407843,0.160665,0.47854,0.558115,0.411765,0.159194,0.482237,0.558073,0.415686,0.157729,0.485932,0.558013,0.419608,0.15627,0.489624,0.557936,0.423529,0.154815,0.493313,0.55784,0.427451,0.153364,0.497,0.557724,0.431373,0.151918,0.500685,0.557587,0.435294,0.150476,0.504369,0.55743,0.439216,0.149039,0.508051,0.55725,0.443137,0.147607,0.511733,0.557049,0.447059,0.14618,0.515413,0.556823,0.45098,0.144759,0.519093,0.556572,0.454902,0.143343,0.522773,0.556295,0.458824,0.141935,0.526453,0.555991,0.462745,0.140536,0.530132,0.555659,0.466667,0.139147,0.533812,0.555298,0.470588,0.13777,0.537492,0.554906,0.47451,0.136408,0.541173,0.554483,0.478431,0.135066,0.544853,0.554029,0.482353,0.133743,0.548535,0.553541,0.486275,0.132444,0.552216,0.553018,0.490196,0.131172,0.555899,0.552459,0.494118,0.129933,0.559582,0.551864,0.498039,0.128729,0.563265,0.551229,0.501961,0.127568,0.566949,0.550556,0.505882,0.126453,0.570633,0.549841,0.509804,0.125394,0.574318,0.549086,0.513725,0.124395,0.578002,0.548287,0.517647,0.123463,0.581687,0.547445,0.521569,0.122606,0.585371,0.546557,0.52549,0.121831,0.589055,0.545623,0.529412,0.121148,0.592739,0.544641,0.533333,0.120565,0.596422,0.543611,0.537255,0.120092,0.600104,0.54253,0.541176,0.119738,0.603785,0.5414,0.545098,0.119512,0.607464,0.540218,0.54902,0.119423,0.611141,0.538982,0.552941,0.119483,0.614817,0.537692,0.556863,0.119699,0.61849,0.536347,0.560784,0.120081,0.622161,0.534946,0.564706,0.120638,0.625828,0.533488,0.568627,0.12138,0.629492,0.531973,0.572549,0.122312,0.633153,0.530398,0.576471,0.123444,0.636809,0.528763,0.580392,0.12478,0.640461,0.527068,0.584314,0.126326,0.644107,0.525311,0.588235,0.128087,0.647749,0.523491,0.592157,0.130067,0.651384,0.521608,0.596078,0.132268,0.655014,0.519661,0.6,0.134692,0.658636,0.517649,0.603922,0.137339,0.662252,0.515571,0.607843,0.14021,0.665859,0.513427,0.611765,0.143303,0.669459,0.511215,0.615686,0.146616,0.67305,0.508936,0.619608,0.150148,0.676631,0.506589,0.623529,0.153894,0.680203,0.504172,0.627451,0.157851,0.683765,0.501686,0.631373,0.162016,0.687316,0.499129,0.635294,0.166383,0.690856,0.496502,0.639216,0.170948,0.694384,0.493803,0.643137,0.175707,0.6979,0.491033,0.647059,0.180653,0.701402,0.488189,0.65098,0.185783,0.704891,0.485273,0.654902,0.19109,0.708366,0.482284,0.658824,0.196571,0.711827,0.479221,0.662745,0.202219,0.715272,0.476084,0.666667,0.20803,0.718701,0.472873,0.670588,0.214,0.722114,0.469588,0.67451,0.220124,0.725509,0.466226,0.678431,0.226397,0.728888,0.462789,0.682353,0.232815,0.732247,0.459277,0.686275,0.239374,0.735588,0.455688,0.690196,0.24607,0.73891,0.452024,0.694118,0.252899,0.742211,0.448284,0.698039,0.259857,0.745492,0.444467,0.701961,0.266941,0.748751,0.440573,0.705882,0.274149,0.751988,0.436601,0.709804,0.281477,0.755203,0.432552,0.713725,0.288921,0.758394,0.428426,0.717647,0.296479,0.761561,0.424223,0.721569,0.304148,0.764704,0.419943,0.72549,0.311925,0.767822,0.415586,0.729412,0.319809,0.770914,0.411152,0.733333,0.327796,0.77398,0.40664,0.737255,0.335885,0.777018,0.402049,0.741176,0.344074,0.780029,0.397381,0.745098,0.35236,0.783011,0.392636,0.74902,0.360741,0.785964,0.387814,0.752941,0.369214,0.788888,0.382914,0.756863,0.377779,0.791781,0.377939,0.760784,0.386433,0.794644,0.372886,0.764706,0.395174,0.797475,0.367757,0.768627,0.404001,0.800275,0.362552,0.772549,0.412913,0.803041,0.357269,0.776471,0.421908,0.805774,0.35191,0.780392,0.430983,0.808473,0.346476,0.784314,0.440137,0.811138,0.340967,0.788235,0.449368,0.813768,0.335384,0.792157,0.458674,0.816363,0.329727,0.796078,0.468053,0.818921,0.323998,0.8,0.477504,0.821444,0.318195,0.803922,0.487026,0.823929,0.312321,0.807843,0.496615,0.826376,0.306377,0.811765,0.506271,0.828786,0.300362,0.815686,0.515992,0.831158,0.294279,0.819608,0.525776,0.833491,0.288127,0.823529,0.535621,0.835785,0.281908,0.827451,0.545524,0.838039,0.275626,0.831373,0.555484,0.840254,0.269281,0.835294,0.565498,0.84243,0.262877,0.839216,0.575563,0.844566,0.256415,0.843137,0.585678,0.846661,0.249897,0.847059,0.595839,0.848717,0.243329,0.85098,0.606045,0.850733,0.236712,0.854902,0.616293,0.852709,0.230052,0.858824,0.626579,0.854645,0.223353,0.862745,0.636902,0.856542,0.21662,0.866667,0.647257,0.8584,0.209861,0.870588,0.657642,0.860219,0.203082,0.87451,0.668054,0.861999,0.196293,0.878431,0.678489,0.863742,0.189503,0.882353,0.688944,0.865448,0.182725,0.886275,0.699415,0.867117,0.175971,0.890196,0.709898,0.868751,0.169257,0.894118,0.720391,0.87035,0.162603,0.898039,0.730889,0.871916,0.156029,0.901961,0.741388,0.873449,0.149561,0.905882,0.751884,0.874951,0.143228,0.909804,0.762373,0.876424,0.137064,0.913725,0.772852,0.877868,0.131109,0.917647,0.783315,0.879285,0.125405,0.921569,0.79376,0.880678,0.120005,0.92549,0.804182,0.882046,0.114965,0.929412,0.814576,0.883393,0.110347,0.933333,0.82494,0.88472,0.106217,0.937255,0.83527,0.886029,0.102646,0.941176,0.845561,0.887322,0.099702,0.945098,0.85581,0.888601,0.097452,0.94902,0.866013,0.889868,0.095953,0.952941,0.876168,0.891125,0.09525,0.956863,0.886271,0.892374,0.095374,0.960784,0.89632,0.893616,0.096335,0.964706,0.906311,0.894855,0.098125,0.968627,0.916242,0.896091,0.100717,0.972549,0.926106,0.89733,0.104071,0.976471,0.935904,0.89857,0.108131,0.980392,0.945636,0.899815,0.112838,0.984314,0.9553,0.901065,0.118128,0.988235,0.964894,0.902323,0.123941,0.992157,0.974417,0.90359,0.130215,0.996078,0.983868,0.904867,0.136897,1,0.993248,0.906157,0.143936]},{"ShowIndexedColorActiveValues":1,"IndexedColors":[0.07,0.5,0.7,1,1,1,0.85,1,1,0.8,0.5,1,0.76,1,0,1,0.71,0.71,0.5,0.5,0.5,0.05,0.05,1,1,0.05,0.05,0.7,1,1,0.7,0.89,0.96,0.67,0.36,0.95,0.54,1,0,0.75,0.65,0.65,0.5,0.6,0.6,1,0.5,0,1,1,0.19,0.12,0.94,0.12,0.5,0.82,0.89,0.56,0.25,0.83,0.24,1,0,0.9,0.9,0.9,0.75,0.76,0.78,0.65,0.65,0.67,0.54,0.6,0.78,0.61,0.48,0.78,0.5,0.48,0.78,0.44,0.48,0.78,0.36,0.48,0.76,1,0.48,0.38,0.49,0.5,0.69,0.76,0.56,0.56,0.4,0.56,0.56,0.74,0.5,0.89,1,0.63,0,0.65,0.16,0.16,0.36,0.72,0.82,0.44,0.18,0.69,0,1,0,0.58,1,1,0.58,0.88,0.88,0.45,0.76,0.79,0.33,0.71,0.71,0.23,0.62,0.62,0.14,0.56,0.56,0.04,0.49,0.55,0,0.41,0.52,0.88,0.88,1,1,0.85,0.56,0.65,0.46,0.45,0.4,0.5,0.5,0.62,0.39,0.71,0.83,0.48,0,0.58,0,0.58,0.26,0.62,0.69,0.34,0.09,0.56,0,0.79,0,0.44,0.83,1,1,1,0.78,0.85,1,0.78,0.78,1,0.78,0.64,1,0.78,0.56,1,0.78,0.38,1,0.78,0.27,1,0.78,0.19,1,0.78,0.12,1,0.78,0,1,0.61,0,0.9,0.46,0,0.83,0.32,0,0.75,0.22,0,0.67,0.14,0.3,0.76,1,0.3,0.65,1,0.13,0.58,0.84,0.15,0.49,0.67,0.15,0.4,0.59,0.09,0.33,0.53,0.96,0.93,0.82,0.8,0.82,0.12,0.71,0.71,0.76,0.65,0.33,0.3,0.34,0.35,0.38,0.62,0.31,0.71,0.67,0.36,0,0.46,0.31,0.27,0.26,0.51,0.59,0.26,0,0.4,0,0.49,0,0.44,0.67,0.98,0,0.73,1,0,0.63,1,0,0.56,1,0,0.5,1,0,0.42,1,0.33,0.36,0.95,0.47,0.36,0.89,0.54,0.31,0.89,0.63,0.21,0.83,0.7,0.12,0.83,0.7,0.12,0.73,0.7,0.05,0.65,0.74,0.05,0.53,0.78,0,0.4,0.8,0,0.35,0.82,0,0.31,0.85,0,0.27,0.88,0,0.22,0.9,0,0.18,0.91,0,0.15,0.92,0,0.14,0.93,0,0.13,0.94,0,0.12,0.95,0,0.11,0.96,0,0.1,0.97,0,0.09,0.98,0,0.08,0.99,0,0.07,1,0,0.06],"Annotations":[0,"Xx",1,"H",2,"He",3,"Li",4,"Be",5,"B",6,"C",7,"N",8,"O",9,"F",10,"Ne",11,"Na",12,"Mg",13,"Al",14,"Si",15,"P",16,"S",17,"Cl",18,"Ar",19,"K",20,"Ca",21,"Sc",22,"Ti",23,"V",24,"Cr",25,"Mn",26,"Fe",27,"Co",28,"Ni",29,"Cu",30,"Zn",31,"Ga",32,"Ge",33,"As",34,"Se",35,"Br",36,"Kr",37,"Rb",38,"Sr",39,"Y",40,"Zr",41,"Nb",42,"Mo",43,"Tc",44,"Ru",45,"Rh",46,"Pd",47,"Ag",48,"Cd",49,"In",50,"Sn",51,"Sb",52,"Te",53,"I",54,"Xe",55,"Cs",56,"Ba",57,"La",58,"Ce",59,"Pr",60,"Nd",61,"Pm",62,"Sm",63,"Eu",64,"Gd",65,"Tb",66,"Dy",67,"Ho",68,"Er",69,"Tm",70,"Yb",71,"Lu",72,"Hf",73,"Ta",74,"W",75,"Re",76,"Os",77,"Ir",78,"Pt",79,"Au",80,"Hg",81,"Tl",82,"Pb",83,"Bi",84,"Po",85,"At",86,"Rn",87,"Fr",88,"Ra",89,"Ac",90,"Th",91,"Pa",92,"U",93,"Np",94,"Pu",95,"Am",96,"Cm",97,"Bk",98,"Cf",99,"Es",100,"Fm",101,"Md",102,"No",103,"Lr",104,"Rf",105,"Db",106,"Sg",107,"Bh",108,"Hs",109,"Mt",110,"Ds",111,"Rg",112,"Cn",113,"Uut",114,"Uuq",115,"Uup",116,"Uuh",117,"Uus",118,"Uuo"],"Name":"BlueObeliskElements"}]
 
 /***/ }),
-/* 242 */
+/* 247 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -52395,11 +54276,630 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _DataArray = __webpack_require__(5);
+var _AppendPolyData = __webpack_require__(248);
+
+var _AppendPolyData2 = _interopRequireDefault(_AppendPolyData);
+
+var _ConeSource = __webpack_require__(115);
+
+var _ConeSource2 = _interopRequireDefault(_ConeSource);
+
+var _CylinderSource = __webpack_require__(249);
+
+var _CylinderSource2 = _interopRequireDefault(_CylinderSource);
+
+var _MatrixBuilder = __webpack_require__(116);
+
+var _MatrixBuilder2 = _interopRequireDefault(_MatrixBuilder);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+// ----------------------------------------------------------------------------
+// vtkArrowSource methods
+// ----------------------------------------------------------------------------
+
+function vtkArrowSource(publicAPI, model) {
+  // Set our className
+  model.classHierarchy.push('vtkArrowSource');
+
+  function requestData(inData, outData) {
+    if (model.deleted) {
+      return;
+    }
+
+    var cylinder = _CylinderSource2.default.newInstance({ capping: true });
+    cylinder.setResolution(model.shaftResolution);
+    cylinder.setRadius(model.shaftRadius);
+    cylinder.setHeight(1.0 - model.tipLength);
+    cylinder.setCenter(0, (1.0 - model.tipLength) * 0.5, 0.0);
+
+    var cylinderPD = cylinder.getOutputData();
+    var cylinderPts = cylinderPD.getPoints().getData();
+    var cylinderNormals = cylinderPD.getPointData().getNormals().getData();
+
+    // Apply transformation to the cylinder
+    _MatrixBuilder2.default.buildFromDegree().rotateZ(-90).apply(cylinderPts).apply(cylinderNormals);
+
+    var cone = _ConeSource2.default.newInstance();
+    cone.setResolution(model.tipResolution);
+    cone.setHeight(model.tipLength);
+    cone.setRadius(model.tipRadius);
+
+    var conePD = cone.getOutputData();
+    var conePts = conePD.getPoints().getData();
+
+    // Apply transformation to the cone
+    _MatrixBuilder2.default.buildFromRadian().translate(1.0 - model.tipLength * 0.5, 0.0, 0.0).apply(conePts);
+
+    var append = _AppendPolyData2.default.newInstance();
+    append.setInputData(cylinderPD);
+    append.addInputData(conePD);
+
+    if (model.invert) {
+      var appendPD = append.getOutputData();
+      var appendPts = appendPD.getPoints().getData();
+      // Apply transformation to the arrow
+      _MatrixBuilder2.default.buildFromDegree().translate(1, 0, 0).scale(-1, 1, 1).apply(appendPts);
+
+      // Update output
+      outData[0] = appendPD;
+    } else {
+      // Update output
+      outData[0] = append.getOutputData();
+    }
+  }
+
+  // Expose methods
+  publicAPI.requestData = requestData;
+}
+
+// ----------------------------------------------------------------------------
+// Object factory
+// ----------------------------------------------------------------------------
+
+var DEFAULT_VALUES = {
+  tipResolution: 6,
+  tipRadius: 0.1,
+  tipLength: 0.35,
+  shaftResolution: 6,
+  shaftRadius: 0.03,
+  invert: false,
+  pointType: 'Float32Array'
+};
+
+// ----------------------------------------------------------------------------
+
+function extend(publicAPI, model) {
+  var initialValues = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+
+  Object.assign(model, DEFAULT_VALUES, initialValues);
+
+  // Build VTK API
+  _macro2.default.obj(publicAPI, model);
+  _macro2.default.setGet(publicAPI, model, ['tipResolution', 'tipRadius', 'tipLength', 'shaftResolution', 'shaftRadius', 'invert']);
+  _macro2.default.algo(publicAPI, model, 0, 1);
+  vtkArrowSource(publicAPI, model);
+}
+
+// ----------------------------------------------------------------------------
+
+var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtkArrowSource');
+
+// ----------------------------------------------------------------------------
+
+exports.default = { newInstance: newInstance, extend: extend };
+
+/***/ }),
+/* 248 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.newInstance = undefined;
+exports.extend = extend;
+
+var _macro = __webpack_require__(0);
+
+var _macro2 = _interopRequireDefault(_macro);
+
+var _DataArray = __webpack_require__(4);
 
 var _DataArray2 = _interopRequireDefault(_DataArray);
 
-var _PolyData = __webpack_require__(37);
+var _Points = __webpack_require__(21);
+
+var _Points2 = _interopRequireDefault(_Points);
+
+var _PolyData = __webpack_require__(22);
+
+var _PolyData2 = _interopRequireDefault(_PolyData);
+
+var _Constants = __webpack_require__(32);
+
+var _Constants2 = __webpack_require__(9);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var vtkErrorMacro = _macro2.default.vtkErrorMacro;
+
+
+function offsetCellArray(typedArray, offset) {
+  var currentIdx = 0;
+  return typedArray.map(function (value, index) {
+    if (index === currentIdx) {
+      currentIdx += value + 1;
+      return value;
+    }
+    return value + offset;
+  });
+}
+
+function appendCellData(dest, src, ptOffset, cellOffset) {
+  dest.set(offsetCellArray(src, ptOffset), cellOffset);
+}
+
+// ----------------------------------------------------------------------------
+// vtkAppendPolyData methods
+// ----------------------------------------------------------------------------
+
+function vtkAppendPolyData(publicAPI, model) {
+  // Set our classname
+  model.classHierarchy.push('vtkAppendPolyData');
+
+  publicAPI.requestData = function (inData, outData) {
+    // implement requestData
+    var numberOfInputs = publicAPI.getNumberOfInputPorts();
+    if (!numberOfInputs) {
+      vtkErrorMacro('No input specified.');
+      return;
+    }
+
+    if (numberOfInputs === 1) {
+      // pass through filter
+      outData[0] = inData[0];
+      return;
+    }
+
+    // Allocate output
+    var output = _PolyData2.default.newInstance();
+
+    var numPts = 0;
+    var pointType = 0;
+    var ttype = 1;
+    var firstType = 1;
+    var numVerts = 0;
+    var numLines = 0;
+    var numStrips = 0;
+    var numPolys = 0;
+
+    // Field data is propogated to output only if present in all inputs
+    var hasPtNormals = true; // assume present by default
+    var hasPtTCoords = true;
+    var hasPtScalars = true;
+
+    for (var i = 0; i < numberOfInputs; i++) {
+      var ds = inData[i];
+      if (!ds) {
+        vtkErrorMacro('Invalid or missing input');
+        return;
+      }
+      var dsNumPts = ds.getPoints().getNumberOfPoints();
+      numPts += dsNumPts;
+      numVerts += ds.getVerts().getNumberOfValues();
+      numLines += ds.getLines().getNumberOfValues();
+      numStrips += ds.getStrips().getNumberOfValues();
+      numPolys += ds.getPolys().getNumberOfValues();
+
+      if (dsNumPts) {
+        if (firstType) {
+          firstType = 0;
+          pointType = ds.getPoints().getDataType();
+        }
+        ttype = ds.getPoints().getDataType();
+        pointType = pointType > ttype ? pointType : ttype;
+      }
+
+      var ptD = ds.getPointData();
+      if (ptD) {
+        hasPtNormals = hasPtNormals && ptD.getNormals() !== null;
+        hasPtTCoords = hasPtTCoords && ptD.getTCoords() !== null;
+        hasPtScalars = hasPtScalars && ptD.getScalars() !== null;
+      } else {
+        hasPtNormals = false;
+        hasPtTCoords = false;
+        hasPtScalars = false;
+      }
+    }
+
+    if (model.outputPointsPrecision === _Constants.DesiredOutputPrecision.SINGLE) {
+      pointType = _Constants2.VtkDataTypes.FLOAT;
+    } else if (model.outputPointsPrecision === _Constants.DesiredOutputPrecision.DOUBLE) {
+      pointType = _Constants2.VtkDataTypes.DOUBLE;
+    }
+
+    var points = _Points2.default.newInstance({ dataType: pointType });
+    points.setNumberOfPoints(numPts);
+    var pointData = points.getData();
+
+    var vertData = new Uint32Array(numVerts);
+    var lineData = new Uint32Array(numLines);
+    var stripData = new Uint32Array(numStrips);
+    var polyData = new Uint32Array(numPolys);
+
+    var newPtNormals = null;
+    var newPtTCoords = null;
+    var newPtScalars = null;
+
+    var lds = inData[numberOfInputs - 1];
+    if (hasPtNormals) {
+      var dsNormals = lds.getPointData().getNormals();
+      newPtNormals = _DataArray2.default.newInstance({
+        numberOfComponents: 3,
+        numberOfTuples: numPts,
+        size: 3 * numPts,
+        dataType: dsNormals.getDataType(),
+        name: dsNormals.getName()
+      });
+    }
+    if (hasPtTCoords) {
+      var dsTCoords = lds.getPointData().getTCoords();
+      newPtTCoords = _DataArray2.default.newInstance({
+        numberOfComponents: 2,
+        numberOfTuples: numPts,
+        size: 2 * numPts,
+        dataType: dsTCoords.getDataType(),
+        name: dsTCoords.getName()
+      });
+    }
+    if (hasPtScalars) {
+      var dsScalars = lds.getPointData().getScalars();
+      newPtScalars = _DataArray2.default.newInstance({
+        numberOfComponents: dsScalars.getNumberOfComponents(),
+        numberOfTuples: numPts,
+        size: numPts * dsScalars.getNumberOfComponents(),
+        dataType: dsScalars.getDataType(),
+        name: dsScalars.getName()
+      });
+    }
+
+    numPts = 0;
+    numVerts = 0;
+    numLines = 0;
+    numStrips = 0;
+    numPolys = 0;
+    for (var _i = 0; _i < numberOfInputs; _i++) {
+      var _ds = inData[_i];
+      pointData.set(_ds.getPoints().getData(), numPts * 3);
+      appendCellData(vertData, _ds.getVerts().getData(), numPts, numVerts);
+      numVerts += _ds.getVerts().getNumberOfValues();
+      appendCellData(lineData, _ds.getLines().getData(), numPts, numLines);
+      numLines += _ds.getLines().getNumberOfValues();
+      appendCellData(stripData, _ds.getStrips().getData(), numPts, numStrips);
+      numStrips += _ds.getStrips().getNumberOfValues();
+      appendCellData(polyData, _ds.getPolys().getData(), numPts, numPolys);
+      numPolys += _ds.getPolys().getNumberOfValues();
+
+      var dsPD = _ds.getPointData();
+      if (hasPtNormals) {
+        var ptNorms = dsPD.getNormals();
+        newPtNormals.getData().set(ptNorms.getData(), numPts * 3);
+      }
+      if (hasPtTCoords) {
+        var ptTCoords = dsPD.getTCoords();
+        newPtTCoords.getData().set(ptTCoords.getData(), numPts * 2);
+      }
+      if (hasPtScalars) {
+        var ptScalars = dsPD.getScalars();
+        newPtScalars.getData().set(ptScalars.getData(), numPts * newPtScalars.getNumberOfComponents());
+      }
+
+      numPts += _ds.getPoints().getNumberOfPoints();
+    }
+
+    output.setPoints(points);
+    output.getVerts().setData(vertData);
+    output.getLines().setData(lineData);
+    output.getStrips().setData(stripData);
+    output.getPolys().setData(polyData);
+    if (newPtNormals) {
+      output.getPointData().setNormals(newPtNormals);
+    }
+    if (newPtTCoords) {
+      output.getPointData().setTCoords(newPtTCoords);
+    }
+    if (newPtScalars) {
+      output.getPointData().setScalars(newPtScalars);
+    }
+    outData[0] = output;
+  };
+}
+
+// ----------------------------------------------------------------------------
+// Object factory
+// ----------------------------------------------------------------------------
+
+var DEFAULT_VALUES = {
+  outputPointsPrecision: _Constants.DesiredOutputPrecision.DEFAULT
+};
+
+// ----------------------------------------------------------------------------
+
+function extend(publicAPI, model) {
+  var initialValues = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+
+  Object.assign(model, DEFAULT_VALUES, initialValues);
+
+  // Build VTK API
+  _macro2.default.setGet(publicAPI, model, ['outputPointsPrecision']);
+
+  // Make this a VTK object
+  _macro2.default.obj(publicAPI, model);
+
+  // Also make it an algorithm with one input and one output
+  _macro2.default.algo(publicAPI, model, 1, 1);
+
+  // Object specific methods
+  vtkAppendPolyData(publicAPI, model);
+}
+
+// ----------------------------------------------------------------------------
+
+var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtkAppendPolyData');
+
+// ----------------------------------------------------------------------------
+
+exports.default = Object.assign({ newInstance: newInstance, extend: extend });
+
+/***/ }),
+/* 249 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.newInstance = undefined;
+exports.extend = extend;
+
+var _macro = __webpack_require__(0);
+
+var _macro2 = _interopRequireDefault(_macro);
+
+var _DataArray = __webpack_require__(4);
+
+var _DataArray2 = _interopRequireDefault(_DataArray);
+
+var _PolyData = __webpack_require__(22);
+
+var _PolyData2 = _interopRequireDefault(_PolyData);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+// ----------------------------------------------------------------------------
+// vtkCylinderSource methods
+// ----------------------------------------------------------------------------
+
+function vtkCylinderSource(publicAPI, model) {
+  // Set our classname
+  model.classHierarchy.push('vtkCylinderSource');
+
+  function requestData(inData, outData) {
+    if (model.deleted) {
+      return;
+    }
+
+    var dataset = outData[0];
+
+    var angle = 2.0 * Math.PI / model.resolution;
+    var numberOfPoints = 2 * model.resolution;
+    var numberOfPolys = 5 * model.resolution;
+
+    if (model.capping) {
+      numberOfPoints = 4 * model.resolution;
+      numberOfPolys = 7 * model.resolution + 2;
+    }
+
+    // Points
+    var points = new window[model.pointType](numberOfPoints * 3);
+
+    // Cells
+    var cellLocation = 0;
+    var polys = new Uint32Array(numberOfPolys);
+
+    // Normals
+    var normalsData = new Float32Array(numberOfPoints * 3);
+    var normals = _DataArray2.default.newInstance({
+      numberOfComponents: 3,
+      values: normalsData,
+      name: 'Normals'
+    });
+
+    // Texture coords
+    var tcData = new Float32Array(numberOfPoints * 2);
+    var tcoords = _DataArray2.default.newInstance({
+      numberOfComponents: 2,
+      values: tcData,
+      name: 'TCoords'
+    });
+
+    // Generate points for all sides
+    var nbot = [0.0, 0.0, 0.0];
+    var ntop = [0.0, 0.0, 0.0];
+    var xbot = [0.0, 0.0, 0.0];
+    var xtop = [0.0, 0.0, 0.0];
+    var tcbot = [0.0, 0.0];
+    var tctop = [0.0, 0.0];
+    for (var i = 0; i < model.resolution; i++) {
+      // x coordinate
+      nbot[0] = Math.cos(i * angle);
+      ntop[0] = nbot[0];
+      xbot[0] = model.radius * nbot[0] + model.center[0];
+      xtop[0] = xbot[0];
+      tcbot[0] = Math.abs(2.0 * i / model.resolution - 1.0);
+      tctop[0] = tcbot[0];
+
+      // y coordinate
+      xbot[1] = 0.5 * model.height + model.center[1];
+      xtop[1] = -0.5 * model.height + model.center[1];
+      tcbot[1] = 0.0;
+      tctop[1] = 1.0;
+
+      // z coordinate
+      nbot[2] = -Math.sin(i * angle);
+      ntop[2] = nbot[2];
+      xbot[2] = model.radius * nbot[2] + model.center[2];
+      xtop[2] = xbot[2];
+
+      var pointIdx = 2 * i;
+      for (var j = 0; j < 3; j++) {
+        normalsData[pointIdx * 3 + j] = nbot[j];
+        normalsData[(pointIdx + 1) * 3 + j] = ntop[j];
+        points[pointIdx * 3 + j] = xbot[j];
+        points[(pointIdx + 1) * 3 + j] = xtop[j];
+        if (j < 2) {
+          tcData[pointIdx * 2 + j] = tcbot[j];
+          tcData[(pointIdx + 1) * 2 + j] = tctop[j];
+        }
+      }
+    }
+
+    // Generate polygons for sides
+    for (var _i = 0; _i < model.resolution; _i++) {
+      polys[cellLocation++] = 4;
+      polys[cellLocation++] = 2 * _i;
+      polys[cellLocation++] = 2 * _i + 1;
+      var pt = (2 * _i + 3) % (2 * model.resolution);
+      polys[cellLocation++] = pt;
+      polys[cellLocation++] = pt - 1;
+    }
+
+    if (model.capping) {
+      // Generate points for top/bottom polygons
+      for (var _i2 = 0; _i2 < model.resolution; _i2++) {
+        // x coordinate
+        xbot[0] = model.radius * Math.cos(_i2 * angle);
+        xtop[0] = xbot[0];
+        tcbot[0] = xbot[0];
+        tctop[0] = xbot[0];
+        xbot[0] += model.center[0];
+        xtop[0] += model.center[0];
+
+        // y coordinate
+        nbot[1] = 1.0;
+        ntop[1] = -1.0;
+        xbot[1] = 0.5 * model.height + model.center[1];
+        xtop[1] = -0.5 * model.height + model.center[1];
+
+        // z coordinate
+        xbot[2] = -model.radius * Math.sin(_i2 * angle);
+        xtop[2] = xbot[2];
+        tcbot[1] = xbot[2];
+        tctop[1] = xbot[2];
+        xbot[2] += model.center[2];
+        xtop[2] += model.center[2];
+        var botIdx = 2 * model.resolution + _i2;
+        var topIdx = 3 * model.resolution + model.resolution - _i2 - 1;
+        for (var _j = 0; _j < 3; _j++) {
+          normalsData[3 * botIdx + _j] = nbot[_j];
+          normalsData[3 * topIdx + _j] = ntop[_j];
+          points[3 * botIdx + _j] = xbot[_j];
+          points[3 * topIdx + _j] = xtop[_j];
+          if (_j < 2) {
+            tcData[2 * botIdx + _j] = tcbot[_j];
+            tcData[2 * topIdx + _j] = tctop[_j];
+          }
+        }
+      }
+
+      // Generate polygons for top/bottom
+      polys[cellLocation++] = model.resolution;
+      for (var _i3 = 0; _i3 < model.resolution; _i3++) {
+        polys[cellLocation++] = 2 * model.resolution + _i3;
+      }
+      polys[cellLocation++] = model.resolution;
+      for (var _i4 = 0; _i4 < model.resolution; _i4++) {
+        polys[cellLocation++] = 3 * model.resolution + _i4;
+      }
+    }
+
+    dataset = _PolyData2.default.newInstance();
+    dataset.getPoints().setData(points, 3);
+    dataset.getPolys().setData(polys, 1);
+    dataset.getPointData().setNormals(normals);
+    dataset.getPointData().setTCoords(tcoords);
+
+    // Update output
+    outData[0] = dataset;
+  }
+
+  // Expose methods
+  publicAPI.requestData = requestData;
+}
+
+// ----------------------------------------------------------------------------
+// Object factory
+// ----------------------------------------------------------------------------
+
+var DEFAULT_VALUES = {
+  height: 1.0,
+  radius: 1.0,
+  resolution: 6,
+  center: [0, 0, 0],
+  capping: true,
+  pointType: 'Float32Array'
+};
+
+// ----------------------------------------------------------------------------
+
+function extend(publicAPI, model) {
+  var initialValues = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
+
+  Object.assign(model, DEFAULT_VALUES, initialValues);
+
+  // Build VTK API
+  _macro2.default.obj(publicAPI, model);
+  _macro2.default.setGet(publicAPI, model, ['height', 'radius', 'resolution', 'capping']);
+  _macro2.default.setGetArray(publicAPI, model, ['center'], 3);
+  _macro2.default.algo(publicAPI, model, 0, 1);
+  vtkCylinderSource(publicAPI, model);
+}
+
+// ----------------------------------------------------------------------------
+
+var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtkCylinderSource');
+
+// ----------------------------------------------------------------------------
+
+exports.default = { newInstance: newInstance, extend: extend };
+
+/***/ }),
+/* 250 */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.newInstance = undefined;
+exports.extend = extend;
+
+var _macro = __webpack_require__(0);
+
+var _macro2 = _interopRequireDefault(_macro);
+
+var _DataArray = __webpack_require__(4);
+
+var _DataArray2 = _interopRequireDefault(_DataArray);
+
+var _PolyData = __webpack_require__(22);
 
 var _PolyData2 = _interopRequireDefault(_PolyData);
 
@@ -52407,7 +54907,7 @@ var _Math = __webpack_require__(1);
 
 var _Math2 = _interopRequireDefault(_Math);
 
-var _caseTable = __webpack_require__(243);
+var _caseTable = __webpack_require__(251);
 
 var _caseTable2 = _interopRequireDefault(_caseTable);
 
@@ -52687,7 +55187,11 @@ function vtkImageMarchingCubes(publicAPI, model) {
     polydata.getPolys().setData(new Uint32Array(tBuffer));
     if (model.computeNormals) {
       var nData = new Float32Array(nBuffer);
-      var normals = _DataArray2.default.newInstance({ numberOfComponents: 3, values: nData, name: 'Normals' });
+      var normals = _DataArray2.default.newInstance({
+        numberOfComponents: 3,
+        values: nData,
+        name: 'Normals'
+      });
       polydata.getPointData().setNormals(normals);
     }
     outData[0] = polydata;
@@ -52736,7 +55240,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 243 */
+/* 251 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -52751,262 +55255,263 @@ Object.defineProperty(exports, "__esModule", {
 // end of the list of edges. Edges are taken three at a time to generate
 // triangle points.
 // ----------------------------------------------------------------------------
-var MARCHING_CUBE_CASES = [[-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 0 0 */
-[0, 3, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 1 1 */
-[0, 9, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 2 1 */
-[1, 3, 8, 9, 1, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 3 2 */
-[1, 11, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 4 1 */
-[0, 3, 8, 1, 11, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 5 3 */
-[9, 11, 2, 0, 9, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 6 2 */
-[2, 3, 8, 2, 8, 11, 11, 8, 9, -1, -1, -1, -1, -1, -1, -1], /* 7 5 */
-[3, 2, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 8 1 */
-[0, 2, 10, 8, 0, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 9 2 */
-[1, 0, 9, 2, 10, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 10 3 */
-[1, 2, 10, 1, 10, 9, 9, 10, 8, -1, -1, -1, -1, -1, -1, -1], /* 11 5 */
-[3, 1, 11, 10, 3, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 12 2 */
-[0, 1, 11, 0, 11, 8, 8, 11, 10, -1, -1, -1, -1, -1, -1, -1], /* 13 5 */
-[3, 0, 9, 3, 9, 10, 10, 9, 11, -1, -1, -1, -1, -1, -1, -1], /* 14 5 */
-[9, 11, 8, 11, 10, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 15 8 */
-[4, 8, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 16 1 */
-[4, 0, 3, 7, 4, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 17 2 */
-[0, 9, 1, 8, 7, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 18 3 */
-[4, 9, 1, 4, 1, 7, 7, 1, 3, -1, -1, -1, -1, -1, -1, -1], /* 19 5 */
-[1, 11, 2, 8, 7, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 20 4 */
-[3, 7, 4, 3, 4, 0, 1, 11, 2, -1, -1, -1, -1, -1, -1, -1], /* 21 7 */
-[9, 11, 2, 9, 2, 0, 8, 7, 4, -1, -1, -1, -1, -1, -1, -1], /* 22 7 */
-[2, 9, 11, 2, 7, 9, 2, 3, 7, 7, 4, 9, -1, -1, -1, -1], /* 23 14 */
-[8, 7, 4, 3, 2, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 24 3 */
-[10, 7, 4, 10, 4, 2, 2, 4, 0, -1, -1, -1, -1, -1, -1, -1], /* 25 5 */
-[9, 1, 0, 8, 7, 4, 2, 10, 3, -1, -1, -1, -1, -1, -1, -1], /* 26 6 */
-[4, 10, 7, 9, 10, 4, 9, 2, 10, 9, 1, 2, -1, -1, -1, -1], /* 27 9 */
-[3, 1, 11, 3, 11, 10, 7, 4, 8, -1, -1, -1, -1, -1, -1, -1], /* 28 7 */
-[1, 11, 10, 1, 10, 4, 1, 4, 0, 7, 4, 10, -1, -1, -1, -1], /* 29 11 */
-[4, 8, 7, 9, 10, 0, 9, 11, 10, 10, 3, 0, -1, -1, -1, -1], /* 30 12 */
-[4, 10, 7, 4, 9, 10, 9, 11, 10, -1, -1, -1, -1, -1, -1, -1], /* 31 5 */
-[9, 4, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 32 1 */
-[9, 4, 5, 0, 3, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 33 3 */
-[0, 4, 5, 1, 0, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 34 2 */
-[8, 4, 5, 8, 5, 3, 3, 5, 1, -1, -1, -1, -1, -1, -1, -1], /* 35 5 */
-[1, 11, 2, 9, 4, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 36 3 */
-[3, 8, 0, 1, 11, 2, 4, 5, 9, -1, -1, -1, -1, -1, -1, -1], /* 37 6 */
-[5, 11, 2, 5, 2, 4, 4, 2, 0, -1, -1, -1, -1, -1, -1, -1], /* 38 5 */
-[2, 5, 11, 3, 5, 2, 3, 4, 5, 3, 8, 4, -1, -1, -1, -1], /* 39 9 */
-[9, 4, 5, 2, 10, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 40 4 */
-[0, 2, 10, 0, 10, 8, 4, 5, 9, -1, -1, -1, -1, -1, -1, -1], /* 41 7 */
-[0, 4, 5, 0, 5, 1, 2, 10, 3, -1, -1, -1, -1, -1, -1, -1], /* 42 7 */
-[2, 5, 1, 2, 8, 5, 2, 10, 8, 4, 5, 8, -1, -1, -1, -1], /* 43 11 */
-[11, 10, 3, 11, 3, 1, 9, 4, 5, -1, -1, -1, -1, -1, -1, -1], /* 44 7 */
-[4, 5, 9, 0, 1, 8, 8, 1, 11, 8, 11, 10, -1, -1, -1, -1], /* 45 12 */
-[5, 0, 4, 5, 10, 0, 5, 11, 10, 10, 3, 0, -1, -1, -1, -1], /* 46 14 */
-[5, 8, 4, 5, 11, 8, 11, 10, 8, -1, -1, -1, -1, -1, -1, -1], /* 47 5 */
-[9, 8, 7, 5, 9, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 48 2 */
-[9, 0, 3, 9, 3, 5, 5, 3, 7, -1, -1, -1, -1, -1, -1, -1], /* 49 5 */
-[0, 8, 7, 0, 7, 1, 1, 7, 5, -1, -1, -1, -1, -1, -1, -1], /* 50 5 */
-[1, 3, 5, 3, 7, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 51 8 */
-[9, 8, 7, 9, 7, 5, 11, 2, 1, -1, -1, -1, -1, -1, -1, -1], /* 52 7 */
-[11, 2, 1, 9, 0, 5, 5, 0, 3, 5, 3, 7, -1, -1, -1, -1], /* 53 12 */
-[8, 2, 0, 8, 5, 2, 8, 7, 5, 11, 2, 5, -1, -1, -1, -1], /* 54 11 */
-[2, 5, 11, 2, 3, 5, 3, 7, 5, -1, -1, -1, -1, -1, -1, -1], /* 55 5 */
-[7, 5, 9, 7, 9, 8, 3, 2, 10, -1, -1, -1, -1, -1, -1, -1], /* 56 7 */
-[9, 7, 5, 9, 2, 7, 9, 0, 2, 2, 10, 7, -1, -1, -1, -1], /* 57 14 */
-[2, 10, 3, 0, 8, 1, 1, 8, 7, 1, 7, 5, -1, -1, -1, -1], /* 58 12 */
-[10, 1, 2, 10, 7, 1, 7, 5, 1, -1, -1, -1, -1, -1, -1, -1], /* 59 5 */
-[9, 8, 5, 8, 7, 5, 11, 3, 1, 11, 10, 3, -1, -1, -1, -1], /* 60 10 */
-[5, 0, 7, 5, 9, 0, 7, 0, 10, 1, 11, 0, 10, 0, 11, -1], /* 61 7 */
-[10, 0, 11, 10, 3, 0, 11, 0, 5, 8, 7, 0, 5, 0, 7, -1], /* 62 7 */
-[10, 5, 11, 7, 5, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 63 2 */
-[11, 5, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 64 1 */
-[0, 3, 8, 5, 6, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 65 4 */
-[9, 1, 0, 5, 6, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 66 3 */
-[1, 3, 8, 1, 8, 9, 5, 6, 11, -1, -1, -1, -1, -1, -1, -1], /* 67 7 */
-[1, 5, 6, 2, 1, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 68 2 */
-[1, 5, 6, 1, 6, 2, 3, 8, 0, -1, -1, -1, -1, -1, -1, -1], /* 69 7 */
-[9, 5, 6, 9, 6, 0, 0, 6, 2, -1, -1, -1, -1, -1, -1, -1], /* 70 5 */
-[5, 8, 9, 5, 2, 8, 5, 6, 2, 3, 8, 2, -1, -1, -1, -1], /* 71 11 */
-[2, 10, 3, 11, 5, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 72 3 */
-[10, 8, 0, 10, 0, 2, 11, 5, 6, -1, -1, -1, -1, -1, -1, -1], /* 73 7 */
-[0, 9, 1, 2, 10, 3, 5, 6, 11, -1, -1, -1, -1, -1, -1, -1], /* 74 6 */
-[5, 6, 11, 1, 2, 9, 9, 2, 10, 9, 10, 8, -1, -1, -1, -1], /* 75 12 */
-[6, 10, 3, 6, 3, 5, 5, 3, 1, -1, -1, -1, -1, -1, -1, -1], /* 76 5 */
-[0, 10, 8, 0, 5, 10, 0, 1, 5, 5, 6, 10, -1, -1, -1, -1], /* 77 14 */
-[3, 6, 10, 0, 6, 3, 0, 5, 6, 0, 9, 5, -1, -1, -1, -1], /* 78 9 */
-[6, 9, 5, 6, 10, 9, 10, 8, 9, -1, -1, -1, -1, -1, -1, -1], /* 79 5 */
-[5, 6, 11, 4, 8, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 80 3 */
-[4, 0, 3, 4, 3, 7, 6, 11, 5, -1, -1, -1, -1, -1, -1, -1], /* 81 7 */
-[1, 0, 9, 5, 6, 11, 8, 7, 4, -1, -1, -1, -1, -1, -1, -1], /* 82 6 */
-[11, 5, 6, 1, 7, 9, 1, 3, 7, 7, 4, 9, -1, -1, -1, -1], /* 83 12 */
-[6, 2, 1, 6, 1, 5, 4, 8, 7, -1, -1, -1, -1, -1, -1, -1], /* 84 7 */
-[1, 5, 2, 5, 6, 2, 3, 4, 0, 3, 7, 4, -1, -1, -1, -1], /* 85 10 */
-[8, 7, 4, 9, 5, 0, 0, 5, 6, 0, 6, 2, -1, -1, -1, -1], /* 86 12 */
-[7, 9, 3, 7, 4, 9, 3, 9, 2, 5, 6, 9, 2, 9, 6, -1], /* 87 7 */
-[3, 2, 10, 7, 4, 8, 11, 5, 6, -1, -1, -1, -1, -1, -1, -1], /* 88 6 */
-[5, 6, 11, 4, 2, 7, 4, 0, 2, 2, 10, 7, -1, -1, -1, -1], /* 89 12 */
-[0, 9, 1, 4, 8, 7, 2, 10, 3, 5, 6, 11, -1, -1, -1, -1], /* 90 13 */
-[9, 1, 2, 9, 2, 10, 9, 10, 4, 7, 4, 10, 5, 6, 11, -1], /* 91 6 */
-[8, 7, 4, 3, 5, 10, 3, 1, 5, 5, 6, 10, -1, -1, -1, -1], /* 92 12 */
-[5, 10, 1, 5, 6, 10, 1, 10, 0, 7, 4, 10, 0, 10, 4, -1], /* 93 7 */
-[0, 9, 5, 0, 5, 6, 0, 6, 3, 10, 3, 6, 8, 7, 4, -1], /* 94 6 */
-[6, 9, 5, 6, 10, 9, 4, 9, 7, 7, 9, 10, -1, -1, -1, -1], /* 95 3 */
-[11, 9, 4, 6, 11, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 96 2 */
-[4, 6, 11, 4, 11, 9, 0, 3, 8, -1, -1, -1, -1, -1, -1, -1], /* 97 7 */
-[11, 1, 0, 11, 0, 6, 6, 0, 4, -1, -1, -1, -1, -1, -1, -1], /* 98 5 */
-[8, 1, 3, 8, 6, 1, 8, 4, 6, 6, 11, 1, -1, -1, -1, -1], /* 99 14 */
-[1, 9, 4, 1, 4, 2, 2, 4, 6, -1, -1, -1, -1, -1, -1, -1], /* 100 5 */
-[3, 8, 0, 1, 9, 2, 2, 9, 4, 2, 4, 6, -1, -1, -1, -1], /* 101 12 */
-[0, 4, 2, 4, 6, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 102 8 */
-[8, 2, 3, 8, 4, 2, 4, 6, 2, -1, -1, -1, -1, -1, -1, -1], /* 103 5 */
-[11, 9, 4, 11, 4, 6, 10, 3, 2, -1, -1, -1, -1, -1, -1, -1], /* 104 7 */
-[0, 2, 8, 2, 10, 8, 4, 11, 9, 4, 6, 11, -1, -1, -1, -1], /* 105 10 */
-[3, 2, 10, 0, 6, 1, 0, 4, 6, 6, 11, 1, -1, -1, -1, -1], /* 106 12 */
-[6, 1, 4, 6, 11, 1, 4, 1, 8, 2, 10, 1, 8, 1, 10, -1], /* 107 7 */
-[9, 4, 6, 9, 6, 3, 9, 3, 1, 10, 3, 6, -1, -1, -1, -1], /* 108 11 */
-[8, 1, 10, 8, 0, 1, 10, 1, 6, 9, 4, 1, 6, 1, 4, -1], /* 109 7 */
-[3, 6, 10, 3, 0, 6, 0, 4, 6, -1, -1, -1, -1, -1, -1, -1], /* 110 5 */
-[6, 8, 4, 10, 8, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 111 2 */
-[7, 6, 11, 7, 11, 8, 8, 11, 9, -1, -1, -1, -1, -1, -1, -1], /* 112 5 */
-[0, 3, 7, 0, 7, 11, 0, 11, 9, 6, 11, 7, -1, -1, -1, -1], /* 113 11 */
-[11, 7, 6, 1, 7, 11, 1, 8, 7, 1, 0, 8, -1, -1, -1, -1], /* 114 9 */
-[11, 7, 6, 11, 1, 7, 1, 3, 7, -1, -1, -1, -1, -1, -1, -1], /* 115 5 */
-[1, 6, 2, 1, 8, 6, 1, 9, 8, 8, 7, 6, -1, -1, -1, -1], /* 116 14 */
-[2, 9, 6, 2, 1, 9, 6, 9, 7, 0, 3, 9, 7, 9, 3, -1], /* 117 7 */
-[7, 0, 8, 7, 6, 0, 6, 2, 0, -1, -1, -1, -1, -1, -1, -1], /* 118 5 */
-[7, 2, 3, 6, 2, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 119 2 */
-[2, 10, 3, 11, 8, 6, 11, 9, 8, 8, 7, 6, -1, -1, -1, -1], /* 120 12 */
-[2, 7, 0, 2, 10, 7, 0, 7, 9, 6, 11, 7, 9, 7, 11, -1], /* 121 7 */
-[1, 0, 8, 1, 8, 7, 1, 7, 11, 6, 11, 7, 2, 10, 3, -1], /* 122 6 */
-[10, 1, 2, 10, 7, 1, 11, 1, 6, 6, 1, 7, -1, -1, -1, -1], /* 123 3 */
-[8, 6, 9, 8, 7, 6, 9, 6, 1, 10, 3, 6, 1, 6, 3, -1], /* 124 7 */
-[0, 1, 9, 10, 7, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 125 4 */
-[7, 0, 8, 7, 6, 0, 3, 0, 10, 10, 0, 6, -1, -1, -1, -1], /* 126 3 */
-[7, 6, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 127 1 */
-[7, 10, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 128 1 */
-[3, 8, 0, 10, 6, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 129 3 */
-[0, 9, 1, 10, 6, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 130 4 */
-[8, 9, 1, 8, 1, 3, 10, 6, 7, -1, -1, -1, -1, -1, -1, -1], /* 131 7 */
-[11, 2, 1, 6, 7, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 132 3 */
-[1, 11, 2, 3, 8, 0, 6, 7, 10, -1, -1, -1, -1, -1, -1, -1], /* 133 6 */
-[2, 0, 9, 2, 9, 11, 6, 7, 10, -1, -1, -1, -1, -1, -1, -1], /* 134 7 */
-[6, 7, 10, 2, 3, 11, 11, 3, 8, 11, 8, 9, -1, -1, -1, -1], /* 135 12 */
-[7, 3, 2, 6, 7, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 136 2 */
-[7, 8, 0, 7, 0, 6, 6, 0, 2, -1, -1, -1, -1, -1, -1, -1], /* 137 5 */
-[2, 6, 7, 2, 7, 3, 0, 9, 1, -1, -1, -1, -1, -1, -1, -1], /* 138 7 */
-[1, 2, 6, 1, 6, 8, 1, 8, 9, 8, 6, 7, -1, -1, -1, -1], /* 139 14 */
-[11, 6, 7, 11, 7, 1, 1, 7, 3, -1, -1, -1, -1, -1, -1, -1], /* 140 5 */
-[11, 6, 7, 1, 11, 7, 1, 7, 8, 1, 8, 0, -1, -1, -1, -1], /* 141 9 */
-[0, 7, 3, 0, 11, 7, 0, 9, 11, 6, 7, 11, -1, -1, -1, -1], /* 142 11 */
-[7, 11, 6, 7, 8, 11, 8, 9, 11, -1, -1, -1, -1, -1, -1, -1], /* 143 5 */
-[6, 4, 8, 10, 6, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 144 2 */
-[3, 10, 6, 3, 6, 0, 0, 6, 4, -1, -1, -1, -1, -1, -1, -1], /* 145 5 */
-[8, 10, 6, 8, 6, 4, 9, 1, 0, -1, -1, -1, -1, -1, -1, -1], /* 146 7 */
-[9, 6, 4, 9, 3, 6, 9, 1, 3, 10, 6, 3, -1, -1, -1, -1], /* 147 11 */
-[6, 4, 8, 6, 8, 10, 2, 1, 11, -1, -1, -1, -1, -1, -1, -1], /* 148 7 */
-[1, 11, 2, 3, 10, 0, 0, 10, 6, 0, 6, 4, -1, -1, -1, -1], /* 149 12 */
-[4, 8, 10, 4, 10, 6, 0, 9, 2, 2, 9, 11, -1, -1, -1, -1], /* 150 10 */
-[11, 3, 9, 11, 2, 3, 9, 3, 4, 10, 6, 3, 4, 3, 6, -1], /* 151 7 */
-[8, 3, 2, 8, 2, 4, 4, 2, 6, -1, -1, -1, -1, -1, -1, -1], /* 152 5 */
-[0, 2, 4, 4, 2, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 153 8 */
-[1, 0, 9, 2, 4, 3, 2, 6, 4, 4, 8, 3, -1, -1, -1, -1], /* 154 12 */
-[1, 4, 9, 1, 2, 4, 2, 6, 4, -1, -1, -1, -1, -1, -1, -1], /* 155 5 */
-[8, 3, 1, 8, 1, 6, 8, 6, 4, 6, 1, 11, -1, -1, -1, -1], /* 156 14 */
-[11, 0, 1, 11, 6, 0, 6, 4, 0, -1, -1, -1, -1, -1, -1, -1], /* 157 5 */
-[4, 3, 6, 4, 8, 3, 6, 3, 11, 0, 9, 3, 11, 3, 9, -1], /* 158 7 */
-[11, 4, 9, 6, 4, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 159 2 */
-[4, 5, 9, 7, 10, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 160 3 */
-[0, 3, 8, 4, 5, 9, 10, 6, 7, -1, -1, -1, -1, -1, -1, -1], /* 161 6 */
-[5, 1, 0, 5, 0, 4, 7, 10, 6, -1, -1, -1, -1, -1, -1, -1], /* 162 7 */
-[10, 6, 7, 8, 4, 3, 3, 4, 5, 3, 5, 1, -1, -1, -1, -1], /* 163 12 */
-[9, 4, 5, 11, 2, 1, 7, 10, 6, -1, -1, -1, -1, -1, -1, -1], /* 164 6 */
-[6, 7, 10, 1, 11, 2, 0, 3, 8, 4, 5, 9, -1, -1, -1, -1], /* 165 13 */
-[7, 10, 6, 5, 11, 4, 4, 11, 2, 4, 2, 0, -1, -1, -1, -1], /* 166 12 */
-[3, 8, 4, 3, 4, 5, 3, 5, 2, 11, 2, 5, 10, 6, 7, -1], /* 167 6 */
-[7, 3, 2, 7, 2, 6, 5, 9, 4, -1, -1, -1, -1, -1, -1, -1], /* 168 7 */
-[9, 4, 5, 0, 6, 8, 0, 2, 6, 6, 7, 8, -1, -1, -1, -1], /* 169 12 */
-[3, 2, 6, 3, 6, 7, 1, 0, 5, 5, 0, 4, -1, -1, -1, -1], /* 170 10 */
-[6, 8, 2, 6, 7, 8, 2, 8, 1, 4, 5, 8, 1, 8, 5, -1], /* 171 7 */
-[9, 4, 5, 11, 6, 1, 1, 6, 7, 1, 7, 3, -1, -1, -1, -1], /* 172 12 */
-[1, 11, 6, 1, 6, 7, 1, 7, 0, 8, 0, 7, 9, 4, 5, -1], /* 173 6 */
-[4, 11, 0, 4, 5, 11, 0, 11, 3, 6, 7, 11, 3, 11, 7, -1], /* 174 7 */
-[7, 11, 6, 7, 8, 11, 5, 11, 4, 4, 11, 8, -1, -1, -1, -1], /* 175 3 */
-[6, 5, 9, 6, 9, 10, 10, 9, 8, -1, -1, -1, -1, -1, -1, -1], /* 176 5 */
-[3, 10, 6, 0, 3, 6, 0, 6, 5, 0, 5, 9, -1, -1, -1, -1], /* 177 9 */
-[0, 8, 10, 0, 10, 5, 0, 5, 1, 5, 10, 6, -1, -1, -1, -1], /* 178 14 */
-[6, 3, 10, 6, 5, 3, 5, 1, 3, -1, -1, -1, -1, -1, -1, -1], /* 179 5 */
-[1, 11, 2, 9, 10, 5, 9, 8, 10, 10, 6, 5, -1, -1, -1, -1], /* 180 12 */
-[0, 3, 10, 0, 10, 6, 0, 6, 9, 5, 9, 6, 1, 11, 2, -1], /* 181 6 */
-[10, 5, 8, 10, 6, 5, 8, 5, 0, 11, 2, 5, 0, 5, 2, -1], /* 182 7 */
-[6, 3, 10, 6, 5, 3, 2, 3, 11, 11, 3, 5, -1, -1, -1, -1], /* 183 3 */
-[5, 9, 8, 5, 8, 2, 5, 2, 6, 3, 2, 8, -1, -1, -1, -1], /* 184 11 */
-[9, 6, 5, 9, 0, 6, 0, 2, 6, -1, -1, -1, -1, -1, -1, -1], /* 185 5 */
-[1, 8, 5, 1, 0, 8, 5, 8, 6, 3, 2, 8, 6, 8, 2, -1], /* 186 7 */
-[1, 6, 5, 2, 6, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 187 2 */
-[1, 6, 3, 1, 11, 6, 3, 6, 8, 5, 9, 6, 8, 6, 9, -1], /* 188 7 */
-[11, 0, 1, 11, 6, 0, 9, 0, 5, 5, 0, 6, -1, -1, -1, -1], /* 189 3 */
-[0, 8, 3, 5, 11, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 190 4 */
-[11, 6, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 191 1 */
-[10, 11, 5, 7, 10, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 192 2 */
-[10, 11, 5, 10, 5, 7, 8, 0, 3, -1, -1, -1, -1, -1, -1, -1], /* 193 7 */
-[5, 7, 10, 5, 10, 11, 1, 0, 9, -1, -1, -1, -1, -1, -1, -1], /* 194 7 */
-[11, 5, 7, 11, 7, 10, 9, 1, 8, 8, 1, 3, -1, -1, -1, -1], /* 195 10 */
-[10, 2, 1, 10, 1, 7, 7, 1, 5, -1, -1, -1, -1, -1, -1, -1], /* 196 5 */
-[0, 3, 8, 1, 7, 2, 1, 5, 7, 7, 10, 2, -1, -1, -1, -1], /* 197 12 */
-[9, 5, 7, 9, 7, 2, 9, 2, 0, 2, 7, 10, -1, -1, -1, -1], /* 198 14 */
-[7, 2, 5, 7, 10, 2, 5, 2, 9, 3, 8, 2, 9, 2, 8, -1], /* 199 7 */
-[2, 11, 5, 2, 5, 3, 3, 5, 7, -1, -1, -1, -1, -1, -1, -1], /* 200 5 */
-[8, 0, 2, 8, 2, 5, 8, 5, 7, 11, 5, 2, -1, -1, -1, -1], /* 201 11 */
-[9, 1, 0, 5, 3, 11, 5, 7, 3, 3, 2, 11, -1, -1, -1, -1], /* 202 12 */
-[9, 2, 8, 9, 1, 2, 8, 2, 7, 11, 5, 2, 7, 2, 5, -1], /* 203 7 */
-[1, 5, 3, 3, 5, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 204 8 */
-[0, 7, 8, 0, 1, 7, 1, 5, 7, -1, -1, -1, -1, -1, -1, -1], /* 205 5 */
-[9, 3, 0, 9, 5, 3, 5, 7, 3, -1, -1, -1, -1, -1, -1, -1], /* 206 5 */
-[9, 7, 8, 5, 7, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 207 2 */
-[5, 4, 8, 5, 8, 11, 11, 8, 10, -1, -1, -1, -1, -1, -1, -1], /* 208 5 */
-[5, 4, 0, 5, 0, 10, 5, 10, 11, 10, 0, 3, -1, -1, -1, -1], /* 209 14 */
-[0, 9, 1, 8, 11, 4, 8, 10, 11, 11, 5, 4, -1, -1, -1, -1], /* 210 12 */
-[11, 4, 10, 11, 5, 4, 10, 4, 3, 9, 1, 4, 3, 4, 1, -1], /* 211 7 */
-[2, 1, 5, 2, 5, 8, 2, 8, 10, 4, 8, 5, -1, -1, -1, -1], /* 212 11 */
-[0, 10, 4, 0, 3, 10, 4, 10, 5, 2, 1, 10, 5, 10, 1, -1], /* 213 7 */
-[0, 5, 2, 0, 9, 5, 2, 5, 10, 4, 8, 5, 10, 5, 8, -1], /* 214 7 */
-[9, 5, 4, 2, 3, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 215 4 */
-[2, 11, 5, 3, 2, 5, 3, 5, 4, 3, 4, 8, -1, -1, -1, -1], /* 216 9 */
-[5, 2, 11, 5, 4, 2, 4, 0, 2, -1, -1, -1, -1, -1, -1, -1], /* 217 5 */
-[3, 2, 11, 3, 11, 5, 3, 5, 8, 4, 8, 5, 0, 9, 1, -1], /* 218 6 */
-[5, 2, 11, 5, 4, 2, 1, 2, 9, 9, 2, 4, -1, -1, -1, -1], /* 219 3 */
-[8, 5, 4, 8, 3, 5, 3, 1, 5, -1, -1, -1, -1, -1, -1, -1], /* 220 5 */
-[0, 5, 4, 1, 5, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 221 2 */
-[8, 5, 4, 8, 3, 5, 9, 5, 0, 0, 5, 3, -1, -1, -1, -1], /* 222 3 */
-[9, 5, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 223 1 */
-[4, 7, 10, 4, 10, 9, 9, 10, 11, -1, -1, -1, -1, -1, -1, -1], /* 224 5 */
-[0, 3, 8, 4, 7, 9, 9, 7, 10, 9, 10, 11, -1, -1, -1, -1], /* 225 12 */
-[1, 10, 11, 1, 4, 10, 1, 0, 4, 7, 10, 4, -1, -1, -1, -1], /* 226 11 */
-[3, 4, 1, 3, 8, 4, 1, 4, 11, 7, 10, 4, 11, 4, 10, -1], /* 227 7 */
-[4, 7, 10, 9, 4, 10, 9, 10, 2, 9, 2, 1, -1, -1, -1, -1], /* 228 9 */
-[9, 4, 7, 9, 7, 10, 9, 10, 1, 2, 1, 10, 0, 3, 8, -1], /* 229 6 */
-[10, 4, 7, 10, 2, 4, 2, 0, 4, -1, -1, -1, -1, -1, -1, -1], /* 230 5 */
-[10, 4, 7, 10, 2, 4, 8, 4, 3, 3, 4, 2, -1, -1, -1, -1], /* 231 3 */
-[2, 11, 9, 2, 9, 7, 2, 7, 3, 7, 9, 4, -1, -1, -1, -1], /* 232 14 */
-[9, 7, 11, 9, 4, 7, 11, 7, 2, 8, 0, 7, 2, 7, 0, -1], /* 233 7 */
-[3, 11, 7, 3, 2, 11, 7, 11, 4, 1, 0, 11, 4, 11, 0, -1], /* 234 7 */
-[1, 2, 11, 8, 4, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 235 4 */
-[4, 1, 9, 4, 7, 1, 7, 3, 1, -1, -1, -1, -1, -1, -1, -1], /* 236 5 */
-[4, 1, 9, 4, 7, 1, 0, 1, 8, 8, 1, 7, -1, -1, -1, -1], /* 237 3 */
-[4, 3, 0, 7, 3, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 238 2 */
-[4, 7, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 239 1 */
-[9, 8, 11, 11, 8, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 240 8 */
-[3, 9, 0, 3, 10, 9, 10, 11, 9, -1, -1, -1, -1, -1, -1, -1], /* 241 5 */
-[0, 11, 1, 0, 8, 11, 8, 10, 11, -1, -1, -1, -1, -1, -1, -1], /* 242 5 */
-[3, 11, 1, 10, 11, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 243 2 */
-[1, 10, 2, 1, 9, 10, 9, 8, 10, -1, -1, -1, -1, -1, -1, -1], /* 244 5 */
-[3, 9, 0, 3, 10, 9, 1, 9, 2, 2, 9, 10, -1, -1, -1, -1], /* 245 3 */
-[0, 10, 2, 8, 10, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 246 2 */
-[3, 10, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 247 1 */
-[2, 8, 3, 2, 11, 8, 11, 9, 8, -1, -1, -1, -1, -1, -1, -1], /* 248 5 */
-[9, 2, 11, 0, 2, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 249 2 */
-[2, 8, 3, 2, 11, 8, 0, 8, 1, 1, 8, 11, -1, -1, -1, -1], /* 250 3 */
-[1, 2, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 251 1 */
-[1, 8, 3, 9, 8, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 252 2 */
-[0, 1, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 253 1 */
-[0, 8, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1], /* 254 1 */
-[-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]];
+var MARCHING_CUBE_CASES = [[-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 0 0 */
+, [0, 3, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 1 1 */
+, [0, 9, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 2 1 */
+, [1, 3, 8, 9, 1, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 3 2 */
+, [1, 11, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 4 1 */
+, [0, 3, 8, 1, 11, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 5 3 */
+, [9, 11, 2, 0, 9, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 6 2 */
+, [2, 3, 8, 2, 8, 11, 11, 8, 9, -1, -1, -1, -1, -1, -1, -1] /* 7 5 */
+, [3, 2, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 8 1 */
+, [0, 2, 10, 8, 0, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 9 2 */
+, [1, 0, 9, 2, 10, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 10 3 */
+, [1, 2, 10, 1, 10, 9, 9, 10, 8, -1, -1, -1, -1, -1, -1, -1] /* 11 5 */
+, [3, 1, 11, 10, 3, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 12 2 */
+, [0, 1, 11, 0, 11, 8, 8, 11, 10, -1, -1, -1, -1, -1, -1, -1] /* 13 5 */
+, [3, 0, 9, 3, 9, 10, 10, 9, 11, -1, -1, -1, -1, -1, -1, -1] /* 14 5 */
+, [9, 11, 8, 11, 10, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 15 8 */
+, [4, 8, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 16 1 */
+, [4, 0, 3, 7, 4, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 17 2 */
+, [0, 9, 1, 8, 7, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 18 3 */
+, [4, 9, 1, 4, 1, 7, 7, 1, 3, -1, -1, -1, -1, -1, -1, -1] /* 19 5 */
+, [1, 11, 2, 8, 7, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 20 4 */
+, [3, 7, 4, 3, 4, 0, 1, 11, 2, -1, -1, -1, -1, -1, -1, -1] /* 21 7 */
+, [9, 11, 2, 9, 2, 0, 8, 7, 4, -1, -1, -1, -1, -1, -1, -1] /* 22 7 */
+, [2, 9, 11, 2, 7, 9, 2, 3, 7, 7, 4, 9, -1, -1, -1, -1] /* 23 14 */
+, [8, 7, 4, 3, 2, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 24 3 */
+, [10, 7, 4, 10, 4, 2, 2, 4, 0, -1, -1, -1, -1, -1, -1, -1] /* 25 5 */
+, [9, 1, 0, 8, 7, 4, 2, 10, 3, -1, -1, -1, -1, -1, -1, -1] /* 26 6 */
+, [4, 10, 7, 9, 10, 4, 9, 2, 10, 9, 1, 2, -1, -1, -1, -1] /* 27 9 */
+, [3, 1, 11, 3, 11, 10, 7, 4, 8, -1, -1, -1, -1, -1, -1, -1] /* 28 7 */
+, [1, 11, 10, 1, 10, 4, 1, 4, 0, 7, 4, 10, -1, -1, -1, -1] /* 29 11 */
+, [4, 8, 7, 9, 10, 0, 9, 11, 10, 10, 3, 0, -1, -1, -1, -1] /* 30 12 */
+, [4, 10, 7, 4, 9, 10, 9, 11, 10, -1, -1, -1, -1, -1, -1, -1] /* 31 5 */
+, [9, 4, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 32 1 */
+, [9, 4, 5, 0, 3, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 33 3 */
+, [0, 4, 5, 1, 0, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 34 2 */
+, [8, 4, 5, 8, 5, 3, 3, 5, 1, -1, -1, -1, -1, -1, -1, -1] /* 35 5 */
+, [1, 11, 2, 9, 4, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 36 3 */
+, [3, 8, 0, 1, 11, 2, 4, 5, 9, -1, -1, -1, -1, -1, -1, -1] /* 37 6 */
+, [5, 11, 2, 5, 2, 4, 4, 2, 0, -1, -1, -1, -1, -1, -1, -1] /* 38 5 */
+, [2, 5, 11, 3, 5, 2, 3, 4, 5, 3, 8, 4, -1, -1, -1, -1] /* 39 9 */
+, [9, 4, 5, 2, 10, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 40 4 */
+, [0, 2, 10, 0, 10, 8, 4, 5, 9, -1, -1, -1, -1, -1, -1, -1] /* 41 7 */
+, [0, 4, 5, 0, 5, 1, 2, 10, 3, -1, -1, -1, -1, -1, -1, -1] /* 42 7 */
+, [2, 5, 1, 2, 8, 5, 2, 10, 8, 4, 5, 8, -1, -1, -1, -1] /* 43 11 */
+, [11, 10, 3, 11, 3, 1, 9, 4, 5, -1, -1, -1, -1, -1, -1, -1] /* 44 7 */
+, [4, 5, 9, 0, 1, 8, 8, 1, 11, 8, 11, 10, -1, -1, -1, -1] /* 45 12 */
+, [5, 0, 4, 5, 10, 0, 5, 11, 10, 10, 3, 0, -1, -1, -1, -1] /* 46 14 */
+, [5, 8, 4, 5, 11, 8, 11, 10, 8, -1, -1, -1, -1, -1, -1, -1] /* 47 5 */
+, [9, 8, 7, 5, 9, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 48 2 */
+, [9, 0, 3, 9, 3, 5, 5, 3, 7, -1, -1, -1, -1, -1, -1, -1] /* 49 5 */
+, [0, 8, 7, 0, 7, 1, 1, 7, 5, -1, -1, -1, -1, -1, -1, -1] /* 50 5 */
+, [1, 3, 5, 3, 7, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 51 8 */
+, [9, 8, 7, 9, 7, 5, 11, 2, 1, -1, -1, -1, -1, -1, -1, -1] /* 52 7 */
+, [11, 2, 1, 9, 0, 5, 5, 0, 3, 5, 3, 7, -1, -1, -1, -1] /* 53 12 */
+, [8, 2, 0, 8, 5, 2, 8, 7, 5, 11, 2, 5, -1, -1, -1, -1] /* 54 11 */
+, [2, 5, 11, 2, 3, 5, 3, 7, 5, -1, -1, -1, -1, -1, -1, -1] /* 55 5 */
+, [7, 5, 9, 7, 9, 8, 3, 2, 10, -1, -1, -1, -1, -1, -1, -1] /* 56 7 */
+, [9, 7, 5, 9, 2, 7, 9, 0, 2, 2, 10, 7, -1, -1, -1, -1] /* 57 14 */
+, [2, 10, 3, 0, 8, 1, 1, 8, 7, 1, 7, 5, -1, -1, -1, -1] /* 58 12 */
+, [10, 1, 2, 10, 7, 1, 7, 5, 1, -1, -1, -1, -1, -1, -1, -1] /* 59 5 */
+, [9, 8, 5, 8, 7, 5, 11, 3, 1, 11, 10, 3, -1, -1, -1, -1] /* 60 10 */
+, [5, 0, 7, 5, 9, 0, 7, 0, 10, 1, 11, 0, 10, 0, 11, -1] /* 61 7 */
+, [10, 0, 11, 10, 3, 0, 11, 0, 5, 8, 7, 0, 5, 0, 7, -1] /* 62 7 */
+, [10, 5, 11, 7, 5, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 63 2 */
+, [11, 5, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 64 1 */
+, [0, 3, 8, 5, 6, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 65 4 */
+, [9, 1, 0, 5, 6, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 66 3 */
+, [1, 3, 8, 1, 8, 9, 5, 6, 11, -1, -1, -1, -1, -1, -1, -1] /* 67 7 */
+, [1, 5, 6, 2, 1, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 68 2 */
+, [1, 5, 6, 1, 6, 2, 3, 8, 0, -1, -1, -1, -1, -1, -1, -1] /* 69 7 */
+, [9, 5, 6, 9, 6, 0, 0, 6, 2, -1, -1, -1, -1, -1, -1, -1] /* 70 5 */
+, [5, 8, 9, 5, 2, 8, 5, 6, 2, 3, 8, 2, -1, -1, -1, -1] /* 71 11 */
+, [2, 10, 3, 11, 5, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 72 3 */
+, [10, 8, 0, 10, 0, 2, 11, 5, 6, -1, -1, -1, -1, -1, -1, -1] /* 73 7 */
+, [0, 9, 1, 2, 10, 3, 5, 6, 11, -1, -1, -1, -1, -1, -1, -1] /* 74 6 */
+, [5, 6, 11, 1, 2, 9, 9, 2, 10, 9, 10, 8, -1, -1, -1, -1] /* 75 12 */
+, [6, 10, 3, 6, 3, 5, 5, 3, 1, -1, -1, -1, -1, -1, -1, -1] /* 76 5 */
+, [0, 10, 8, 0, 5, 10, 0, 1, 5, 5, 6, 10, -1, -1, -1, -1] /* 77 14 */
+, [3, 6, 10, 0, 6, 3, 0, 5, 6, 0, 9, 5, -1, -1, -1, -1] /* 78 9 */
+, [6, 9, 5, 6, 10, 9, 10, 8, 9, -1, -1, -1, -1, -1, -1, -1] /* 79 5 */
+, [5, 6, 11, 4, 8, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 80 3 */
+, [4, 0, 3, 4, 3, 7, 6, 11, 5, -1, -1, -1, -1, -1, -1, -1] /* 81 7 */
+, [1, 0, 9, 5, 6, 11, 8, 7, 4, -1, -1, -1, -1, -1, -1, -1] /* 82 6 */
+, [11, 5, 6, 1, 7, 9, 1, 3, 7, 7, 4, 9, -1, -1, -1, -1] /* 83 12 */
+, [6, 2, 1, 6, 1, 5, 4, 8, 7, -1, -1, -1, -1, -1, -1, -1] /* 84 7 */
+, [1, 5, 2, 5, 6, 2, 3, 4, 0, 3, 7, 4, -1, -1, -1, -1] /* 85 10 */
+, [8, 7, 4, 9, 5, 0, 0, 5, 6, 0, 6, 2, -1, -1, -1, -1] /* 86 12 */
+, [7, 9, 3, 7, 4, 9, 3, 9, 2, 5, 6, 9, 2, 9, 6, -1] /* 87 7 */
+, [3, 2, 10, 7, 4, 8, 11, 5, 6, -1, -1, -1, -1, -1, -1, -1] /* 88 6 */
+, [5, 6, 11, 4, 2, 7, 4, 0, 2, 2, 10, 7, -1, -1, -1, -1] /* 89 12 */
+, [0, 9, 1, 4, 8, 7, 2, 10, 3, 5, 6, 11, -1, -1, -1, -1] /* 90 13 */
+, [9, 1, 2, 9, 2, 10, 9, 10, 4, 7, 4, 10, 5, 6, 11, -1] /* 91 6 */
+, [8, 7, 4, 3, 5, 10, 3, 1, 5, 5, 6, 10, -1, -1, -1, -1] /* 92 12 */
+, [5, 10, 1, 5, 6, 10, 1, 10, 0, 7, 4, 10, 0, 10, 4, -1] /* 93 7 */
+, [0, 9, 5, 0, 5, 6, 0, 6, 3, 10, 3, 6, 8, 7, 4, -1] /* 94 6 */
+, [6, 9, 5, 6, 10, 9, 4, 9, 7, 7, 9, 10, -1, -1, -1, -1] /* 95 3 */
+, [11, 9, 4, 6, 11, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 96 2 */
+, [4, 6, 11, 4, 11, 9, 0, 3, 8, -1, -1, -1, -1, -1, -1, -1] /* 97 7 */
+, [11, 1, 0, 11, 0, 6, 6, 0, 4, -1, -1, -1, -1, -1, -1, -1] /* 98 5 */
+, [8, 1, 3, 8, 6, 1, 8, 4, 6, 6, 11, 1, -1, -1, -1, -1] /* 99 14 */
+, [1, 9, 4, 1, 4, 2, 2, 4, 6, -1, -1, -1, -1, -1, -1, -1] /* 100 5 */
+, [3, 8, 0, 1, 9, 2, 2, 9, 4, 2, 4, 6, -1, -1, -1, -1] /* 101 12 */
+, [0, 4, 2, 4, 6, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 102 8 */
+, [8, 2, 3, 8, 4, 2, 4, 6, 2, -1, -1, -1, -1, -1, -1, -1] /* 103 5 */
+, [11, 9, 4, 11, 4, 6, 10, 3, 2, -1, -1, -1, -1, -1, -1, -1] /* 104 7 */
+, [0, 2, 8, 2, 10, 8, 4, 11, 9, 4, 6, 11, -1, -1, -1, -1] /* 105 10 */
+, [3, 2, 10, 0, 6, 1, 0, 4, 6, 6, 11, 1, -1, -1, -1, -1] /* 106 12 */
+, [6, 1, 4, 6, 11, 1, 4, 1, 8, 2, 10, 1, 8, 1, 10, -1] /* 107 7 */
+, [9, 4, 6, 9, 6, 3, 9, 3, 1, 10, 3, 6, -1, -1, -1, -1] /* 108 11 */
+, [8, 1, 10, 8, 0, 1, 10, 1, 6, 9, 4, 1, 6, 1, 4, -1] /* 109 7 */
+, [3, 6, 10, 3, 0, 6, 0, 4, 6, -1, -1, -1, -1, -1, -1, -1] /* 110 5 */
+, [6, 8, 4, 10, 8, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 111 2 */
+, [7, 6, 11, 7, 11, 8, 8, 11, 9, -1, -1, -1, -1, -1, -1, -1] /* 112 5 */
+, [0, 3, 7, 0, 7, 11, 0, 11, 9, 6, 11, 7, -1, -1, -1, -1] /* 113 11 */
+, [11, 7, 6, 1, 7, 11, 1, 8, 7, 1, 0, 8, -1, -1, -1, -1] /* 114 9 */
+, [11, 7, 6, 11, 1, 7, 1, 3, 7, -1, -1, -1, -1, -1, -1, -1] /* 115 5 */
+, [1, 6, 2, 1, 8, 6, 1, 9, 8, 8, 7, 6, -1, -1, -1, -1] /* 116 14 */
+, [2, 9, 6, 2, 1, 9, 6, 9, 7, 0, 3, 9, 7, 9, 3, -1] /* 117 7 */
+, [7, 0, 8, 7, 6, 0, 6, 2, 0, -1, -1, -1, -1, -1, -1, -1] /* 118 5 */
+, [7, 2, 3, 6, 2, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 119 2 */
+, [2, 10, 3, 11, 8, 6, 11, 9, 8, 8, 7, 6, -1, -1, -1, -1] /* 120 12 */
+, [2, 7, 0, 2, 10, 7, 0, 7, 9, 6, 11, 7, 9, 7, 11, -1] /* 121 7 */
+, [1, 0, 8, 1, 8, 7, 1, 7, 11, 6, 11, 7, 2, 10, 3, -1] /* 122 6 */
+, [10, 1, 2, 10, 7, 1, 11, 1, 6, 6, 1, 7, -1, -1, -1, -1] /* 123 3 */
+, [8, 6, 9, 8, 7, 6, 9, 6, 1, 10, 3, 6, 1, 6, 3, -1] /* 124 7 */
+, [0, 1, 9, 10, 7, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 125 4 */
+, [7, 0, 8, 7, 6, 0, 3, 0, 10, 10, 0, 6, -1, -1, -1, -1] /* 126 3 */
+, [7, 6, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 127 1 */
+, [7, 10, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 128 1 */
+, [3, 8, 0, 10, 6, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 129 3 */
+, [0, 9, 1, 10, 6, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 130 4 */
+, [8, 9, 1, 8, 1, 3, 10, 6, 7, -1, -1, -1, -1, -1, -1, -1] /* 131 7 */
+, [11, 2, 1, 6, 7, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 132 3 */
+, [1, 11, 2, 3, 8, 0, 6, 7, 10, -1, -1, -1, -1, -1, -1, -1] /* 133 6 */
+, [2, 0, 9, 2, 9, 11, 6, 7, 10, -1, -1, -1, -1, -1, -1, -1] /* 134 7 */
+, [6, 7, 10, 2, 3, 11, 11, 3, 8, 11, 8, 9, -1, -1, -1, -1] /* 135 12 */
+, [7, 3, 2, 6, 7, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 136 2 */
+, [7, 8, 0, 7, 0, 6, 6, 0, 2, -1, -1, -1, -1, -1, -1, -1] /* 137 5 */
+, [2, 6, 7, 2, 7, 3, 0, 9, 1, -1, -1, -1, -1, -1, -1, -1] /* 138 7 */
+, [1, 2, 6, 1, 6, 8, 1, 8, 9, 8, 6, 7, -1, -1, -1, -1] /* 139 14 */
+, [11, 6, 7, 11, 7, 1, 1, 7, 3, -1, -1, -1, -1, -1, -1, -1] /* 140 5 */
+, [11, 6, 7, 1, 11, 7, 1, 7, 8, 1, 8, 0, -1, -1, -1, -1] /* 141 9 */
+, [0, 7, 3, 0, 11, 7, 0, 9, 11, 6, 7, 11, -1, -1, -1, -1] /* 142 11 */
+, [7, 11, 6, 7, 8, 11, 8, 9, 11, -1, -1, -1, -1, -1, -1, -1] /* 143 5 */
+, [6, 4, 8, 10, 6, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 144 2 */
+, [3, 10, 6, 3, 6, 0, 0, 6, 4, -1, -1, -1, -1, -1, -1, -1] /* 145 5 */
+, [8, 10, 6, 8, 6, 4, 9, 1, 0, -1, -1, -1, -1, -1, -1, -1] /* 146 7 */
+, [9, 6, 4, 9, 3, 6, 9, 1, 3, 10, 6, 3, -1, -1, -1, -1] /* 147 11 */
+, [6, 4, 8, 6, 8, 10, 2, 1, 11, -1, -1, -1, -1, -1, -1, -1] /* 148 7 */
+, [1, 11, 2, 3, 10, 0, 0, 10, 6, 0, 6, 4, -1, -1, -1, -1] /* 149 12 */
+, [4, 8, 10, 4, 10, 6, 0, 9, 2, 2, 9, 11, -1, -1, -1, -1] /* 150 10 */
+, [11, 3, 9, 11, 2, 3, 9, 3, 4, 10, 6, 3, 4, 3, 6, -1] /* 151 7 */
+, [8, 3, 2, 8, 2, 4, 4, 2, 6, -1, -1, -1, -1, -1, -1, -1] /* 152 5 */
+, [0, 2, 4, 4, 2, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 153 8 */
+, [1, 0, 9, 2, 4, 3, 2, 6, 4, 4, 8, 3, -1, -1, -1, -1] /* 154 12 */
+, [1, 4, 9, 1, 2, 4, 2, 6, 4, -1, -1, -1, -1, -1, -1, -1] /* 155 5 */
+, [8, 3, 1, 8, 1, 6, 8, 6, 4, 6, 1, 11, -1, -1, -1, -1] /* 156 14 */
+, [11, 0, 1, 11, 6, 0, 6, 4, 0, -1, -1, -1, -1, -1, -1, -1] /* 157 5 */
+, [4, 3, 6, 4, 8, 3, 6, 3, 11, 0, 9, 3, 11, 3, 9, -1] /* 158 7 */
+, [11, 4, 9, 6, 4, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 159 2 */
+, [4, 5, 9, 7, 10, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 160 3 */
+, [0, 3, 8, 4, 5, 9, 10, 6, 7, -1, -1, -1, -1, -1, -1, -1] /* 161 6 */
+, [5, 1, 0, 5, 0, 4, 7, 10, 6, -1, -1, -1, -1, -1, -1, -1] /* 162 7 */
+, [10, 6, 7, 8, 4, 3, 3, 4, 5, 3, 5, 1, -1, -1, -1, -1] /* 163 12 */
+, [9, 4, 5, 11, 2, 1, 7, 10, 6, -1, -1, -1, -1, -1, -1, -1] /* 164 6 */
+, [6, 7, 10, 1, 11, 2, 0, 3, 8, 4, 5, 9, -1, -1, -1, -1] /* 165 13 */
+, [7, 10, 6, 5, 11, 4, 4, 11, 2, 4, 2, 0, -1, -1, -1, -1] /* 166 12 */
+, [3, 8, 4, 3, 4, 5, 3, 5, 2, 11, 2, 5, 10, 6, 7, -1] /* 167 6 */
+, [7, 3, 2, 7, 2, 6, 5, 9, 4, -1, -1, -1, -1, -1, -1, -1] /* 168 7 */
+, [9, 4, 5, 0, 6, 8, 0, 2, 6, 6, 7, 8, -1, -1, -1, -1] /* 169 12 */
+, [3, 2, 6, 3, 6, 7, 1, 0, 5, 5, 0, 4, -1, -1, -1, -1] /* 170 10 */
+, [6, 8, 2, 6, 7, 8, 2, 8, 1, 4, 5, 8, 1, 8, 5, -1] /* 171 7 */
+, [9, 4, 5, 11, 6, 1, 1, 6, 7, 1, 7, 3, -1, -1, -1, -1] /* 172 12 */
+, [1, 11, 6, 1, 6, 7, 1, 7, 0, 8, 0, 7, 9, 4, 5, -1] /* 173 6 */
+, [4, 11, 0, 4, 5, 11, 0, 11, 3, 6, 7, 11, 3, 11, 7, -1] /* 174 7 */
+, [7, 11, 6, 7, 8, 11, 5, 11, 4, 4, 11, 8, -1, -1, -1, -1] /* 175 3 */
+, [6, 5, 9, 6, 9, 10, 10, 9, 8, -1, -1, -1, -1, -1, -1, -1] /* 176 5 */
+, [3, 10, 6, 0, 3, 6, 0, 6, 5, 0, 5, 9, -1, -1, -1, -1] /* 177 9 */
+, [0, 8, 10, 0, 10, 5, 0, 5, 1, 5, 10, 6, -1, -1, -1, -1] /* 178 14 */
+, [6, 3, 10, 6, 5, 3, 5, 1, 3, -1, -1, -1, -1, -1, -1, -1] /* 179 5 */
+, [1, 11, 2, 9, 10, 5, 9, 8, 10, 10, 6, 5, -1, -1, -1, -1] /* 180 12 */
+, [0, 3, 10, 0, 10, 6, 0, 6, 9, 5, 9, 6, 1, 11, 2, -1] /* 181 6 */
+, [10, 5, 8, 10, 6, 5, 8, 5, 0, 11, 2, 5, 0, 5, 2, -1] /* 182 7 */
+, [6, 3, 10, 6, 5, 3, 2, 3, 11, 11, 3, 5, -1, -1, -1, -1] /* 183 3 */
+, [5, 9, 8, 5, 8, 2, 5, 2, 6, 3, 2, 8, -1, -1, -1, -1] /* 184 11 */
+, [9, 6, 5, 9, 0, 6, 0, 2, 6, -1, -1, -1, -1, -1, -1, -1] /* 185 5 */
+, [1, 8, 5, 1, 0, 8, 5, 8, 6, 3, 2, 8, 6, 8, 2, -1] /* 186 7 */
+, [1, 6, 5, 2, 6, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 187 2 */
+, [1, 6, 3, 1, 11, 6, 3, 6, 8, 5, 9, 6, 8, 6, 9, -1] /* 188 7 */
+, [11, 0, 1, 11, 6, 0, 9, 0, 5, 5, 0, 6, -1, -1, -1, -1] /* 189 3 */
+, [0, 8, 3, 5, 11, 6, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 190 4 */
+, [11, 6, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 191 1 */
+, [10, 11, 5, 7, 10, 5, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 192 2 */
+, [10, 11, 5, 10, 5, 7, 8, 0, 3, -1, -1, -1, -1, -1, -1, -1] /* 193 7 */
+, [5, 7, 10, 5, 10, 11, 1, 0, 9, -1, -1, -1, -1, -1, -1, -1] /* 194 7 */
+, [11, 5, 7, 11, 7, 10, 9, 1, 8, 8, 1, 3, -1, -1, -1, -1] /* 195 10 */
+, [10, 2, 1, 10, 1, 7, 7, 1, 5, -1, -1, -1, -1, -1, -1, -1] /* 196 5 */
+, [0, 3, 8, 1, 7, 2, 1, 5, 7, 7, 10, 2, -1, -1, -1, -1] /* 197 12 */
+, [9, 5, 7, 9, 7, 2, 9, 2, 0, 2, 7, 10, -1, -1, -1, -1] /* 198 14 */
+, [7, 2, 5, 7, 10, 2, 5, 2, 9, 3, 8, 2, 9, 2, 8, -1] /* 199 7 */
+, [2, 11, 5, 2, 5, 3, 3, 5, 7, -1, -1, -1, -1, -1, -1, -1] /* 200 5 */
+, [8, 0, 2, 8, 2, 5, 8, 5, 7, 11, 5, 2, -1, -1, -1, -1] /* 201 11 */
+, [9, 1, 0, 5, 3, 11, 5, 7, 3, 3, 2, 11, -1, -1, -1, -1] /* 202 12 */
+, [9, 2, 8, 9, 1, 2, 8, 2, 7, 11, 5, 2, 7, 2, 5, -1] /* 203 7 */
+, [1, 5, 3, 3, 5, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 204 8 */
+, [0, 7, 8, 0, 1, 7, 1, 5, 7, -1, -1, -1, -1, -1, -1, -1] /* 205 5 */
+, [9, 3, 0, 9, 5, 3, 5, 7, 3, -1, -1, -1, -1, -1, -1, -1] /* 206 5 */
+, [9, 7, 8, 5, 7, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 207 2 */
+, [5, 4, 8, 5, 8, 11, 11, 8, 10, -1, -1, -1, -1, -1, -1, -1] /* 208 5 */
+, [5, 4, 0, 5, 0, 10, 5, 10, 11, 10, 0, 3, -1, -1, -1, -1] /* 209 14 */
+, [0, 9, 1, 8, 11, 4, 8, 10, 11, 11, 5, 4, -1, -1, -1, -1] /* 210 12 */
+, [11, 4, 10, 11, 5, 4, 10, 4, 3, 9, 1, 4, 3, 4, 1, -1] /* 211 7 */
+, [2, 1, 5, 2, 5, 8, 2, 8, 10, 4, 8, 5, -1, -1, -1, -1] /* 212 11 */
+, [0, 10, 4, 0, 3, 10, 4, 10, 5, 2, 1, 10, 5, 10, 1, -1] /* 213 7 */
+, [0, 5, 2, 0, 9, 5, 2, 5, 10, 4, 8, 5, 10, 5, 8, -1] /* 214 7 */
+, [9, 5, 4, 2, 3, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 215 4 */
+, [2, 11, 5, 3, 2, 5, 3, 5, 4, 3, 4, 8, -1, -1, -1, -1] /* 216 9 */
+, [5, 2, 11, 5, 4, 2, 4, 0, 2, -1, -1, -1, -1, -1, -1, -1] /* 217 5 */
+, [3, 2, 11, 3, 11, 5, 3, 5, 8, 4, 8, 5, 0, 9, 1, -1] /* 218 6 */
+, [5, 2, 11, 5, 4, 2, 1, 2, 9, 9, 2, 4, -1, -1, -1, -1] /* 219 3 */
+, [8, 5, 4, 8, 3, 5, 3, 1, 5, -1, -1, -1, -1, -1, -1, -1] /* 220 5 */
+, [0, 5, 4, 1, 5, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 221 2 */
+, [8, 5, 4, 8, 3, 5, 9, 5, 0, 0, 5, 3, -1, -1, -1, -1] /* 222 3 */
+, [9, 5, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 223 1 */
+, [4, 7, 10, 4, 10, 9, 9, 10, 11, -1, -1, -1, -1, -1, -1, -1] /* 224 5 */
+, [0, 3, 8, 4, 7, 9, 9, 7, 10, 9, 10, 11, -1, -1, -1, -1] /* 225 12 */
+, [1, 10, 11, 1, 4, 10, 1, 0, 4, 7, 10, 4, -1, -1, -1, -1] /* 226 11 */
+, [3, 4, 1, 3, 8, 4, 1, 4, 11, 7, 10, 4, 11, 4, 10, -1] /* 227 7 */
+, [4, 7, 10, 9, 4, 10, 9, 10, 2, 9, 2, 1, -1, -1, -1, -1] /* 228 9 */
+, [9, 4, 7, 9, 7, 10, 9, 10, 1, 2, 1, 10, 0, 3, 8, -1] /* 229 6 */
+, [10, 4, 7, 10, 2, 4, 2, 0, 4, -1, -1, -1, -1, -1, -1, -1] /* 230 5 */
+, [10, 4, 7, 10, 2, 4, 8, 4, 3, 3, 4, 2, -1, -1, -1, -1] /* 231 3 */
+, [2, 11, 9, 2, 9, 7, 2, 7, 3, 7, 9, 4, -1, -1, -1, -1] /* 232 14 */
+, [9, 7, 11, 9, 4, 7, 11, 7, 2, 8, 0, 7, 2, 7, 0, -1] /* 233 7 */
+, [3, 11, 7, 3, 2, 11, 7, 11, 4, 1, 0, 11, 4, 11, 0, -1] /* 234 7 */
+, [1, 2, 11, 8, 4, 7, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 235 4 */
+, [4, 1, 9, 4, 7, 1, 7, 3, 1, -1, -1, -1, -1, -1, -1, -1] /* 236 5 */
+, [4, 1, 9, 4, 7, 1, 0, 1, 8, 8, 1, 7, -1, -1, -1, -1] /* 237 3 */
+, [4, 3, 0, 7, 3, 4, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 238 2 */
+, [4, 7, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 239 1 */
+, [9, 8, 11, 11, 8, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 240 8 */
+, [3, 9, 0, 3, 10, 9, 10, 11, 9, -1, -1, -1, -1, -1, -1, -1] /* 241 5 */
+, [0, 11, 1, 0, 8, 11, 8, 10, 11, -1, -1, -1, -1, -1, -1, -1] /* 242 5 */
+, [3, 11, 1, 10, 11, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 243 2 */
+, [1, 10, 2, 1, 9, 10, 9, 8, 10, -1, -1, -1, -1, -1, -1, -1] /* 244 5 */
+, [3, 9, 0, 3, 10, 9, 1, 9, 2, 2, 9, 10, -1, -1, -1, -1] /* 245 3 */
+, [0, 10, 2, 8, 10, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 246 2 */
+, [3, 10, 2, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 247 1 */
+, [2, 8, 3, 2, 11, 8, 11, 9, 8, -1, -1, -1, -1, -1, -1, -1] /* 248 5 */
+, [9, 2, 11, 0, 2, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 249 2 */
+, [2, 8, 3, 2, 11, 8, 0, 8, 1, 1, 8, 11, -1, -1, -1, -1] /* 250 3 */
+, [1, 2, 11, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 251 1 */
+, [1, 8, 3, 9, 8, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 252 2 */
+, [0, 1, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 253 1 */
+, [0, 8, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 254 1 */
+, [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1] /* 255 0 */
+];
 
 var EDGES = [[0, 1], [1, 3], [2, 3], [0, 2], [4, 5], [5, 7], [6, 7], [4, 6], [0, 4], [1, 5], [2, 6], [3, 7]];
 
@@ -53028,7 +55533,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 244 */
+/* 252 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -53048,17 +55553,17 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _DataArray = __webpack_require__(5);
+var _DataArray = __webpack_require__(4);
 
 var _DataArray2 = _interopRequireDefault(_DataArray);
 
-var _Points = __webpack_require__(26);
+var _Points = __webpack_require__(21);
 
 var _Points2 = _interopRequireDefault(_Points);
 
-var _Constants = __webpack_require__(53);
+var _Constants = __webpack_require__(54);
 
-var _Constants2 = __webpack_require__(52);
+var _Constants2 = __webpack_require__(32);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -53179,7 +55684,8 @@ function vtkCalculator(publicAPI, model) {
         }], [_Constants.FieldDataTypes.ROW, function (x) {
           return x.getRowData();
         }]].reduce(function (result, value) {
-          result[value[0]] = value[1];return result;
+          result[value[0]] = value[1];
+          return result;
         }, {});
         var dsa = 'location' in spec && spec.location in fetchArrayContainer ? fetchArrayContainer[spec.location](inData) : null;
         if (dsa) {
@@ -53237,7 +55743,8 @@ function vtkCalculator(publicAPI, model) {
         }, function (x) {
           return x.getNumberOfRows();
         }]].reduce(function (result, value) {
-          result[value[0]] = { getData: value[1], getSize: value[2] };return result;
+          result[value[0]] = { getData: value[1], getSize: value[2] };
+          return result;
         }, {});
         var dsa = null;
         var tuples = 0;
@@ -53324,7 +55831,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 245 */
+/* 253 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -53344,15 +55851,15 @@ var _Math = __webpack_require__(1);
 
 var _Math2 = _interopRequireDefault(_Math);
 
-var _Picker = __webpack_require__(246);
+var _Picker = __webpack_require__(254);
 
 var _Picker2 = _interopRequireDefault(_Picker);
 
-var _Points = __webpack_require__(26);
+var _Points = __webpack_require__(21);
 
 var _Points2 = _interopRequireDefault(_Points);
 
-var _Triangle = __webpack_require__(249);
+var _Triangle = __webpack_require__(257);
 
 var _Triangle2 = _interopRequireDefault(_Triangle);
 
@@ -53739,7 +56246,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, STATIC);
 
 /***/ }),
-/* 246 */
+/* 254 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -53755,11 +56262,11 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _AbstractPicker = __webpack_require__(247);
+var _AbstractPicker = __webpack_require__(255);
 
 var _AbstractPicker2 = _interopRequireDefault(_AbstractPicker);
 
-var _Box = __webpack_require__(248);
+var _Box = __webpack_require__(256);
 
 var _Box2 = _interopRequireDefault(_Box);
 
@@ -54076,7 +56583,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 247 */
+/* 255 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -54168,7 +56675,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = { newInstance: newInstance, extend: extend };
 
 /***/ }),
-/* 248 */
+/* 256 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -54184,11 +56691,13 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _BoundingBox = __webpack_require__(59);
+var _BoundingBox = __webpack_require__(60);
 
 var _BoundingBox2 = _interopRequireDefault(_BoundingBox);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } else { return Array.from(arr); } }
 
 // ----------------------------------------------------------------------------
 // Global methods
@@ -54373,6 +56882,31 @@ function vtkBox(publicAPI, model) {
     }
     return distance;
   };
+
+  publicAPI.addBounds = function () {
+    var _model$bbox;
+
+    for (var _len3 = arguments.length, bounds = Array(_len3), _key3 = 0; _key3 < _len3; _key3++) {
+      bounds[_key3] = arguments[_key3];
+    }
+
+    var boundsArray = [];
+
+    if (Array.isArray(bounds[0])) {
+      boundsArray = bounds[0];
+    } else {
+      for (var i = 0; i < bounds.length; i++) {
+        boundsArray.push(bounds[i]);
+      }
+    }
+
+    if (boundsArray.length !== 6) {
+      return;
+    }
+
+    (_model$bbox = model.bbox).addBounds.apply(_model$bbox, _toConsumableArray(boundsArray));
+    model.bbox.modified();
+  };
 }
 
 // ----------------------------------------------------------------------------
@@ -54407,7 +56941,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, STATIC);
 
 /***/ }),
-/* 249 */
+/* 257 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -54423,7 +56957,7 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _Cell = __webpack_require__(115);
+var _Cell = __webpack_require__(117);
 
 var _Cell2 = _interopRequireDefault(_Cell);
 
@@ -54431,7 +56965,7 @@ var _Math = __webpack_require__(1);
 
 var _Math2 = _interopRequireDefault(_Math);
 
-var _Line = __webpack_require__(250);
+var _Line = __webpack_require__(258);
 
 var _Line2 = _interopRequireDefault(_Line);
 
@@ -54807,7 +57341,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, STATIC);
 
 /***/ }),
-/* 250 */
+/* 258 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -54823,11 +57357,11 @@ var _macro = __webpack_require__(0);
 
 var _macro2 = _interopRequireDefault(_macro);
 
-var _Constants = __webpack_require__(251);
+var _Constants = __webpack_require__(259);
 
 var _Constants2 = _interopRequireDefault(_Constants);
 
-var _Cell = __webpack_require__(115);
+var _Cell = __webpack_require__(117);
 
 var _Cell2 = _interopRequireDefault(_Cell);
 
@@ -54859,7 +57393,7 @@ function distanceToLine(x, p1, p2) {
   var denom = _Math2.default.dot(p21, p21);
 
   // trying to avoid an expensive fabs
-  var tolerance = 1.e-05 * num;
+  var tolerance = 1e-5 * num;
   if (denom !== 0.0) {
     outObj.t = num / denom;
   }
@@ -55073,7 +57607,7 @@ var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtk
 exports.default = Object.assign({ newInstance: newInstance, extend: extend }, STATIC, _Constants2.default);
 
 /***/ }),
-/* 251 */
+/* 259 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -55093,7 +57627,7 @@ exports.default = {
 };
 
 /***/ }),
-/* 252 */
+/* 260 */
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
@@ -55102,15 +57636,15 @@ exports.default = {
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_0_vtk_js_Sources_macro___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_0_vtk_js_Sources_macro__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_vtk_js_Sources_Interaction_Style_InteractorStyleTrackballCamera__ = __webpack_require__(108);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_1_vtk_js_Sources_Interaction_Style_InteractorStyleTrackballCamera___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_1_vtk_js_Sources_Interaction_Style_InteractorStyleTrackballCamera__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_vtk_js_Sources_Filters_Sources_ConeSource__ = __webpack_require__(253);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_vtk_js_Sources_Filters_Sources_ConeSource__ = __webpack_require__(115);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_2_vtk_js_Sources_Filters_Sources_ConeSource___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_2_vtk_js_Sources_Filters_Sources_ConeSource__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3_vtk_js_Sources_Rendering_Core_Actor__ = __webpack_require__(60);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_3_vtk_js_Sources_Rendering_Core_Actor__ = __webpack_require__(61);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_3_vtk_js_Sources_Rendering_Core_Actor___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_3_vtk_js_Sources_Rendering_Core_Actor__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4_vtk_js_Sources_Rendering_Core_Mapper__ = __webpack_require__(35);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_4_vtk_js_Sources_Rendering_Core_Mapper__ = __webpack_require__(37);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_4_vtk_js_Sources_Rendering_Core_Mapper___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_4_vtk_js_Sources_Rendering_Core_Mapper__);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_5_vtk_js_Sources_Common_Core_Math__ = __webpack_require__(1);
 /* harmony import */ var __WEBPACK_IMPORTED_MODULE_5_vtk_js_Sources_Common_Core_Math___default = __webpack_require__.n(__WEBPACK_IMPORTED_MODULE_5_vtk_js_Sources_Common_Core_Math__);
-/* harmony import */ var __WEBPACK_IMPORTED_MODULE_6_template__ = __webpack_require__(61);
+/* harmony import */ var __WEBPACK_IMPORTED_MODULE_6_template__ = __webpack_require__(39);
 
 
 
@@ -55120,7 +57654,7 @@ exports.default = {
 
 
 
-__webpack_require__(61);
+__webpack_require__(39);
 
 // ----------------------------------------------------------------------------
 // vtkInteractorStyleTrackballCamera2 methods
@@ -55261,298 +57795,16 @@ const newInstance = __WEBPACK_IMPORTED_MODULE_0_vtk_js_Sources_macro___default.a
 
 /* harmony default export */ __webpack_exports__["a"] = (Object.assign({ newInstance, extend }));
 
-/* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(4)))
+/* WEBPACK VAR INJECTION */}.call(__webpack_exports__, __webpack_require__(5)))
 
 /***/ }),
-/* 253 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.newInstance = undefined;
-exports.extend = extend;
-
-var _macro = __webpack_require__(0);
-
-var _macro2 = _interopRequireDefault(_macro);
-
-var _PolyData = __webpack_require__(37);
-
-var _PolyData2 = _interopRequireDefault(_PolyData);
-
-var _MatrixBuilder = __webpack_require__(254);
-
-var _MatrixBuilder2 = _interopRequireDefault(_MatrixBuilder);
-
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
-
-function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } else { return Array.from(arr); } }
-
-// ----------------------------------------------------------------------------
-// vtkConeSource methods
-// ----------------------------------------------------------------------------
-
-function vtkConeSource(publicAPI, model) {
-  // Set our className
-  model.classHierarchy.push('vtkConeSource');
-
-  function requestData(inData, outData) {
-    var _vtkMatrixBuilder$bui;
-
-    if (model.deleted) {
-      return;
-    }
-
-    var dataset = outData[0];
-
-    var angle = 2 * Math.PI / model.resolution;
-    var xbot = -model.height / 2.0;
-    var numberOfPoints = model.resolution + 1;
-    var cellArraySize = 4 * model.resolution + 1 + model.resolution;
-
-    // Points
-    var pointIdx = 0;
-    var points = new window[model.pointType](numberOfPoints * 3);
-
-    // Cells
-    var cellLocation = 0;
-    var polys = new Uint32Array(cellArraySize);
-
-    // Add summit point
-    points[0] = model.height / 2.0;
-    points[1] = 0.0;
-    points[2] = 0.0;
-
-    // Create bottom cell
-    if (model.capping) {
-      polys[cellLocation++] = model.resolution;
-    }
-
-    // Add all points
-    for (var i = 0; i < model.resolution; i++) {
-      pointIdx++;
-      points[pointIdx * 3 + 0] = xbot;
-      points[pointIdx * 3 + 1] = model.radius * Math.cos(i * angle);
-      points[pointIdx * 3 + 2] = model.radius * Math.sin(i * angle);
-
-      // Add points to bottom cell in reverse order
-      if (model.capping) {
-        polys[model.resolution - cellLocation++ + 1] = pointIdx;
-      }
-    }
-
-    // Add all triangle cells
-    for (var _i = 0; _i < model.resolution; _i++) {
-      polys[cellLocation++] = 3;
-      polys[cellLocation++] = 0;
-      polys[cellLocation++] = _i + 1;
-      polys[cellLocation++] = _i + 2 > model.resolution ? 1 : _i + 2;
-    }
-
-    // Apply tranformation to the points coordinates
-    (_vtkMatrixBuilder$bui = _MatrixBuilder2.default.buildFromRadian()).translate.apply(_vtkMatrixBuilder$bui, _toConsumableArray(model.center)).rotateFromDirections([1, 0, 0], model.direction).apply(points);
-
-    dataset = _PolyData2.default.newInstance();
-    dataset.getPoints().setData(points, 3);
-    dataset.getPolys().setData(polys, 1);
-
-    // Update output
-    outData[0] = dataset;
-  }
-
-  // Expose methods
-  publicAPI.requestData = requestData;
-}
-
-// ----------------------------------------------------------------------------
-// Object factory
-// ----------------------------------------------------------------------------
-
-var DEFAULT_VALUES = {
-  height: 1.0,
-  radius: 0.5,
-  resolution: 6,
-  center: [0, 0, 0],
-  direction: [1.0, 0.0, 0.0],
-  capping: true,
-  pointType: 'Float32Array'
-};
-
-// ----------------------------------------------------------------------------
-
-function extend(publicAPI, model) {
-  var initialValues = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : {};
-
-  Object.assign(model, DEFAULT_VALUES, initialValues);
-
-  // Build VTK API
-  _macro2.default.obj(publicAPI, model);
-  _macro2.default.setGet(publicAPI, model, ['height', 'radius', 'resolution', 'capping']);
-  _macro2.default.setGetArray(publicAPI, model, ['center', 'direction'], 3);
-  _macro2.default.algo(publicAPI, model, 0, 1);
-  vtkConeSource(publicAPI, model);
-}
-
-// ----------------------------------------------------------------------------
-
-var newInstance = exports.newInstance = _macro2.default.newInstance(extend, 'vtkConeSource');
-
-// ----------------------------------------------------------------------------
-
-exports.default = { newInstance: newInstance, extend: extend };
-
-/***/ }),
-/* 254 */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-
-var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
-
-var _glMatrix = __webpack_require__(3);
-
-function _toConsumableArray(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } else { return Array.from(arr); } }
-
-function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
-
-var NoOp = function NoOp(v) {
-  return v;
-};
-
-var IDENTITY = _glMatrix.mat4.create();
-
-var Transform = function () {
-  function Transform() {
-    var useDegre = arguments.length > 0 && arguments[0] !== undefined ? arguments[0] : false;
-
-    _classCallCheck(this, Transform);
-
-    this.matrix = _glMatrix.mat4.create();
-    this.tmp = _glMatrix.vec3.create();
-    this.angleConv = useDegre ? _glMatrix.glMatrix.toRadian : NoOp;
-  }
-
-  _createClass(Transform, [{
-    key: 'rotateFromDirections',
-    value: function rotateFromDirections(originDirection, targetDirection) {
-      var src = _glMatrix.vec3.create();
-      var dst = _glMatrix.vec3.create();
-      var transf = _glMatrix.mat4.create();
-
-      _glMatrix.vec3.set(src, originDirection[0], originDirection[1], originDirection[2]);
-      _glMatrix.vec3.set(dst, targetDirection[0], targetDirection[1], targetDirection[2]);
-      _glMatrix.vec3.normalize(src, src);
-      _glMatrix.vec3.normalize(dst, dst);
-      var cosAlpha = _glMatrix.vec3.dot(src, dst);
-      if (cosAlpha >= 1) {
-        return this;
-      }
-
-      _glMatrix.vec3.cross(this.tmp, src, dst);
-      _glMatrix.mat4.fromRotation(transf, Math.acos(cosAlpha), this.tmp);
-      _glMatrix.mat4.multiply(this.matrix, this.matrix, transf);
-
-      return this;
-    }
-  }, {
-    key: 'rotate',
-    value: function rotate(angle, axis) {
-      _glMatrix.vec3.set.apply(_glMatrix.vec3, [this.tmp].concat(_toConsumableArray(axis)));
-      _glMatrix.vec3.normalize(this.tmp, this.tmp);
-      _glMatrix.mat4.rotate(this.matrix, this.matrix, this.angleConv(angle), this.tmp);
-      return this;
-    }
-  }, {
-    key: 'rotateX',
-    value: function rotateX(angle) {
-      _glMatrix.mat4.rotateX(this.matrix, this.matrix, this.angleConv(angle));
-      return this;
-    }
-  }, {
-    key: 'rotateY',
-    value: function rotateY(angle) {
-      _glMatrix.mat4.rotateY(this.matrix, this.matrix, this.angleConv(angle));
-      return this;
-    }
-  }, {
-    key: 'rotateZ',
-    value: function rotateZ(angle) {
-      _glMatrix.mat4.rotateZ(this.matrix, this.matrix, this.angleConv(angle));
-      return this;
-    }
-  }, {
-    key: 'translate',
-    value: function translate(x, y, z) {
-      _glMatrix.vec3.set(this.tmp, x, y, z);
-      _glMatrix.mat4.translate(this.matrix, this.matrix, this.tmp);
-      return this;
-    }
-  }, {
-    key: 'scale',
-    value: function scale(sx, sy, sz) {
-      _glMatrix.vec3.set(this.tmp, sx, sy, sz);
-      _glMatrix.mat4.scale(this.matrix, this.matrix, this.tmp);
-      return this;
-    }
-  }, {
-    key: 'apply',
-    value: function apply(typedArray) {
-      var offset = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : 0;
-      var nbIterations = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : -1;
-
-      if (IDENTITY[0] === this.matrix[0] && IDENTITY[1] === this.matrix[1] && IDENTITY[2] === this.matrix[2] && IDENTITY[3] === this.matrix[3] && IDENTITY[4] === this.matrix[4] && IDENTITY[5] === this.matrix[5] && IDENTITY[6] === this.matrix[6] && IDENTITY[7] === this.matrix[7] && IDENTITY[8] === this.matrix[8] && IDENTITY[9] === this.matrix[9] && IDENTITY[10] === this.matrix[10] && IDENTITY[11] === this.matrix[11] && IDENTITY[12] === this.matrix[12] && IDENTITY[13] === this.matrix[13] && IDENTITY[14] === this.matrix[14] && IDENTITY[15] === this.matrix[15]) {
-        return;
-      }
-
-      var size = nbIterations === -1 ? typedArray.length : offset + nbIterations * 3;
-      for (var i = offset; i < size; i += 3) {
-        _glMatrix.vec3.set(this.tmp, typedArray[i], typedArray[i + 1], typedArray[i + 2]);
-        _glMatrix.vec3.transformMat4(this.tmp, this.tmp, this.matrix);
-        typedArray[i] = this.tmp[0];
-        typedArray[i + 1] = this.tmp[1];
-        typedArray[i + 2] = this.tmp[2];
-      }
-    }
-  }, {
-    key: 'getMatrix',
-    value: function getMatrix() {
-      return this.matrix;
-    }
-  }]);
-
-  return Transform;
-}();
-
-function buildFromDegree() {
-  return new Transform(true);
-}
-
-function buildFromRadian() {
-  return new Transform(false);
-}
-
-exports.default = {
-  buildFromDegree: buildFromDegree,
-  buildFromRadian: buildFromRadian
-};
-
-/***/ }),
-/* 255 */
+/* 261 */
 /***/ (function(module, exports) {
 
-module.exports = "<table>\r\n  <tr>\r\n    <td>Depth</td>\r\n    <td>\r\n      <input class='isoValue' type=\"range\" min=\"0.0\" max=\"1.0\" step=\"0.05\" value=\"0.0\" />\r\n    </td>\r\n  </tr>\r\n</table>\r\n";
+module.exports = "<table>\r\n  <tr>\r\n    <td>\r\n      <div class=\"hasTooltip\">Depth</div>\r\n      <div class=\"hidden\">\r\n        Change depth from the cell membrane \r\n      </div>\r\n    </td>\r\n    <td>\r\n      <input class='isoValue' type=\"range\" min=\"0.0\" max=\"1.0\" step=\"0.05\" value=\"0.0\" />\r\n    </td>\r\n    <td align='left'>max</td>\r\n  </tr>\r\n</table>";
 
 /***/ }),
-/* 256 */
+/* 262 */
 /***/ (function(module, exports, __webpack_require__) {
 
 "use strict";
@@ -115492,74 +117744,6 @@ exports["default"] = FloydWarshall;
 /***/ })
 /******/ ]);
 });
-
-/***/ }),
-/* 257 */
-/***/ (function(module, exports) {
-
-
-//
-var hldiv = document.getElementById("mydiv");
-var pos1 = 0;
-var pos2 = 0;
-console.log(hldiv);
-hldiv.style.top = pos2 + "px";
-hldiv.style.left = pos1 + "px";
-
-// Get the modal
-var modal = document.getElementById('myModal');
-
-// // Get the button that opens the modal
-// var btn = document.getElementById("myBtn");
-
-// Get the <span> element that closes the modal
-var span = document.getElementsByClassName("close")[0];
-
-// // When the user clicks the button, open the modal 
-// btn.onclick = function() {
-//     modal.style.display = "block";
-// }
-modal.style.display = "block";
-
-// When the user clicks on <span> (x), close the modal
-span.onclick = function() {
-    modal.style.display = "none";
-}
-
-// When the user clicks anywhere outside of the modal, close it
-window.onclick = function(event) {
-    if (event.target == modal) {
-        modal.style.display = "none";
-    }
-}
-
-
-var slideIndex = 1;
-showSlides(slideIndex);
-
-function plusSlides(n) {
-  showSlides(slideIndex += n);
-}
-
-function currentSlide(n) {
-  showSlides(slideIndex = n);
-}
-
-function showSlides(n) {
-  var i;
-  var slides = document.getElementsByClassName("mySlides");
-  var dots = document.getElementsByClassName("dot");
-  if (n > slides.length) {slideIndex = 1}    
-  if (n < 1) {slideIndex = slides.length}
-  for (i = 0; i < slides.length; i++) {
-      slides[i].style.display = "none";  
-  }
-  for (i = 0; i < dots.length; i++) {
-      dots[i].className = dots[i].className.replace(" active", "");
-  }
-  slides[slideIndex-1].style.display = "block";  
-  dots[slideIndex-1].className += " active";
-}
 
 /***/ })
 /******/ ]);

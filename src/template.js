@@ -62,7 +62,6 @@ function init() {
         objs.push(object);
     }
 
-
     for (let i = 1; i <= 10; i++) {
         var objname = './data/template_parts/p' + i + '.obj';
         loader.load(objname, onLoad, onProgress, onError);
@@ -77,14 +76,11 @@ function init() {
     var controls = new THREE.OrbitControls(camera, container);
     controls.enablePan = false;
     controls.addEventListener('change', render);
-
     window.addEventListener('resize', onWindowResize, false);
-
     // container.addEventListener('mousedown', onDocumentMouseDown, false);
 }
 
 export function selectCompartment(part_i) {
-    var random_col = Math.floor(Math.random() * 16777215);
     for (let i = 0; i < objs.length; i++) {
         objs[i].traverse(function (child) {
             if (child instanceof THREE.Mesh) {

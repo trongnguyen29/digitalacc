@@ -168,8 +168,8 @@ export function updateVolumeViewer(urlToLoad) {
       progressContainer.innerHTML = `Loading ${percent}%`;
     };
 
-    HttpDataAccessHelper.fetchText({}, urlToLoad, { progressCallback }).then((txt) => {
-      global.volumeReader.parse(txt);
+    HttpDataAccessHelper.fetchBinary(urlToLoad, { progressCallback }).then((binary) => {
+      global.volumeReader.parseArrayBuffer(binary);
       const source = global.volumeReader.getOutputData(0);
 
       // Read data

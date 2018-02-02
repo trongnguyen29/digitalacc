@@ -3,6 +3,7 @@ import 'vtk.js/Sources/favicon';
 import HttpDataAccessHelper from 'vtk.js/Sources/IO/Core/DataAccessHelper/HttpDataAccessHelper';
 import vtkXMLImageDataReader from 'vtk.js/Sources/IO/XML/XMLImageDataReader';
 import vtkActor from 'vtk.js/Sources/Rendering/Core/Actor';
+import vtkArrowSource from 'vtk.js/Sources/Filters/Sources/ArrowSource';
 import vtkFullScreenRenderWindow from 'vtk.js/Sources/Rendering/Misc/FullScreenRenderWindow';
 import vtkHttpDataSetReader from 'vtk.js/Sources/IO/Core/HttpDataSetReader';
 import vtkImageMarchingCubes from 'vtk.js/Sources/Filters/General/ImageMarchingCubes';
@@ -85,6 +86,30 @@ export function viewIsoSurface(urlToLoad, div_id) {
   renderer.addActor(actor);
   renderer.getActiveCamera().set({ position: [0, 0, -1], viewUp: [0, -1, 0] });
 
+  // Add axes
+  const arrowSource = vtkArrowSource.newInstance();
+  const mapperArrow = vtkMapper.newInstance();
+  mapperArrow.setInputConnection(arrowSource.getOutputPort());
+  var actoraxes = vtkActor.newInstance();
+  actoraxes.getProperty().setColor(1.0, 0.0, 0.0);
+  actoraxes.setScale(20.0, 20.0, 20.0);
+  actoraxes.setMapper(mapperArrow);
+  renderer.addActor(actoraxes);
+  
+  actoraxes = vtkActor.newInstance();  
+  actoraxes.getProperty().setColor(0.0, 1.0, 0.0);
+  actoraxes.setScale(20.0, 20.0, 20.0);
+  actoraxes.rotateZ(90);
+  actoraxes.setMapper(mapperArrow);
+  renderer.addActor(actoraxes);
+
+  actoraxes = vtkActor.newInstance();
+  actoraxes.getProperty().setColor(0.0, 0.0, 1.0);
+  actoraxes.setScale(20.0, 20.0, 20.0);
+  actoraxes.rotateY(-90);
+  actoraxes.setMapper(mapperArrow);
+  renderer.addActor(actoraxes);
+
   // Function for updating iso-value
   function updateIsoValue(e) {
     const isoValue = Number(e.target.value);
@@ -121,8 +146,8 @@ export function updateIsoSurface(urlToLoad) {
     };
 
     const vtiReader = vtkXMLImageDataReader.newInstance();
-    HttpDataAccessHelper.fetchText({}, urlToLoad, { progressCallback }).then((txt) => {
-      vtiReader.parse(txt);
+    HttpDataAccessHelper.fetchBinary(urlToLoad, { progressCallback }).then((binary) => {
+      vtiReader.parseArrayBuffer(binary);
 
       // Update VTK input pipeline
       const source = vtiReader.getOutputData(0);
@@ -178,8 +203,8 @@ export function updateProteinPair(ppiToLoad) {
 
     const vtiReader = vtkXMLImageDataReader.newInstance();
 
-    HttpDataAccessHelper.fetchText({}, ppiToLoad, { progressCallback }).then((txt) => {
-      vtiReader.parse(txt);
+    HttpDataAccessHelper.fetchBinary(ppiToLoad, { progressCallback }).then((binary) => {
+      vtiReader.parseArrayBuffer(binary);
 
       const source = vtiReader.getOutputData(0);
       const dataArray = source.getPointData().getScalars() || source.getPointData().getArrays()[0];
@@ -280,8 +305,8 @@ export function loadLabel(labelToLoad) {
 
   const vtiReader = vtkXMLImageDataReader.newInstance();
 
-  HttpDataAccessHelper.fetchText({}, labelToLoad, { progressCallback }).then((txt) => {
-    vtiReader.parse(txt);
+  HttpDataAccessHelper.fetchBinary(labelToLoad, { progressCallback }).then((binary) => {
+    vtiReader.parseArrayBuffer(binary);
 
     const source = vtiReader.getOutputData(0);
     global.label_dim = source.getDimensions();

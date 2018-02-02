@@ -21,7 +21,8 @@ function vtkPickerInteractorStyle(publicAPI, model) {
   var firstclick = true;
 
   const actor = vtkActor.newInstance();
-  var curang = [1.0,0.0,0.0];
+  var curpivot = [1.0,0.0,0.0];
+  const g = [];
 
   publicAPI.handleRightButtonPress = () => {
     const pos = model.interactor.getEventPosition(model.interactor.getPointerIndex());
@@ -48,33 +49,51 @@ function vtkPickerInteractorStyle(publicAPI, model) {
       const py = Math.min(Math.max(Math.round(pickPoint[1]) / global.spacing[1], 0), hh-1);
       const pz = Math.min(Math.max(Math.round(pickPoint[2]) / global.spacing[2], 0), dd-1);
 
-      var arr = new Array(27).fill(0);
-      for (let ii = 0; ii <= 2; ii++) {
-        if ((px == 0 && ii == 0) || (px == ww-1 && ii == 2))
-          continue;
-        for (let jj = 0; jj <= 2; jj++) {
-          if ((py == 0 && jj == 0) || (py == hh-1 && jj == 2))
-            continue;
-          for (let kk = 0; kk <= 2; kk++) {
-            if ((pz == 0 && kk == 0) || (pz == kk-1 && kk == 2))
-              continue;
-            arr[ii + jj*3 + kk*9] = global.distance[px+ii-1 + ww*(py+jj-1) + ww*hh*(pz+kk-1)];
-          }
-        }
-      }
+      // var arr = new Array(27).fill(0);
+      // for (let ii = 0; ii <= 2; ii++) {
+      //   if ((px == 0 && ii == 0) || (px == ww-1 && ii == 2))
+      //     continue;
+      //   for (let jj = 0; jj <= 2; jj++) {
+      //     if ((py == 0 && jj == 0) || (py == hh-1 && jj == 2))
+      //       continue;
+      //     for (let kk = 0; kk <= 2; kk++) {
+      //       if ((pz == 0 && kk == 0) || (pz == kk-1 && kk == 2))
+      //         continue;
+      //       arr[ii + jj*3 + kk*9] = global.distance[px+ii-1 + ww*(py+jj-1) + ww*hh*(pz+kk-1)];
+      //     }
+      //   }
+      // }
 
-      var mynormal = new Float32Array(3);
-      mynormal[0] = arr[0 + 1*3 + 1*9] - arr[2 + 1*3 + 1*9];
-      mynormal[1] = arr[1 + 0*3 + 1*9] - arr[1 + 2*3 + 1*9];
-      mynormal[2] = arr[1 + 1*3 + 0*9] - arr[1 + 1*3 + 2*9];
-      vtkMath.normalize(mynormal);
-      var halfnormal = new Float32Array(3);
-      halfnormal[0] = mynormal[0] + 1.0;
-      halfnormal[1] = mynormal[1];
-      halfnormal[2] = mynormal[2];
-      vtkMath.normalize(halfnormal);
+      // var g = new Float32Array(3);
+      // g[0] = arr[0 + 1*3 + 1*9] - arr[2 + 1*3 + 1*9];
+      // g[1] = arr[1 + 0*3 + 1*9] - arr[1 + 2*3 + 1*9];
+      // g[2] = arr[1 + 1*3 + 0*9] - arr[1 + 1*3 + 2*9];
+      // vtkMath.normalize(g);
+
+      // built-in marching cube normal vector
+      const slice = global.image_dim[0] * global.image_dim[1];
+      
+      global.marchingCube.getPointGradient(px,py,pz,global.image_dim,slice,[1.0,1.0,1.0],global.distance,g);
+      vtkMath.normalize(g);
+
+      var g_half = new Float32Array(3);
+      g_half[0] = g[0] + 1.0;
+      g_half[1] = g[1];
+      g_half[2] = g[2];
+      if (vtkMath.norm(g_half) == 0) {
+        g_half[0] = g[0];
+        g_half[1] = g[1] + 1.0;
+        g_half[2] = g[2];
+      }
+      vtkMath.normalize(g_half);
     }
 
+    // if nan, do nothing
+    if (vtkMath.isNan(g[0]) || vtkMath.isNan(g[1]) || vtkMath.isNan(g[2])) {
+      return;
+    }
+
+    // show selected compartment
     if (!(global.label_dim === undefined) && !(global.label === undefined)) {
       const ww = global.label_dim[0];
       const hh = global.label_dim[1];
@@ -90,11 +109,12 @@ function vtkPickerInteractorStyle(publicAPI, model) {
       selectCompartment(part_i);
     }
 
-    pickPoint[0] -= mynormal[0]*0.5;
-    pickPoint[1] -= mynormal[1]*0.5;
-    pickPoint[2] -= mynormal[2]*0.5;
+    // update cursor
+    pickPoint[0] -= g[0]*0.5;
+    pickPoint[1] -= g[1]*0.5;
+    pickPoint[2] -= g[2]*0.5;
 
-    const cameraCenter = model.currentRenderer.getActiveCamera().getPosition();
+    // const cameraCenter = model.currentRenderer.getActiveCamera().getPosition();
 
     if (firstclick) {
       const cone = vtkConeSource.newInstance({ resolution: 20 });
@@ -107,14 +127,45 @@ function vtkPickerInteractorStyle(publicAPI, model) {
       model.currentRenderer.addActor(actor);
       firstclick = false;
 
-      actor.rotateWXYZ(180, halfnormal[0], halfnormal[1], halfnormal[2]);
+      if (vtkMath.norm(g) != 0) {
+        actor.rotateWXYZ(180, g_half[0], g_half[1], g_half[2]);
+        curpivot = g_half;
+      }
     } else {
-      actor.rotateWXYZ(-180, curang[0], curang[1], curang[2]);
       actor.setPosition(pickPoint);
-      actor.rotateWXYZ(180, halfnormal[0], halfnormal[1], halfnormal[2]);
+      if (vtkMath.norm(g) != 0) {
+        actor.rotateWXYZ(-180, curpivot[0], curpivot[1], curpivot[2]);
+        actor.rotateWXYZ(180, g_half[0], g_half[1], g_half[2]);
+        curpivot = g_half;
+      }
     }
-    console.log(mynormal);
-    curang = halfnormal;
+
+    // // First get the indices for the voxel
+    // ids[0] = k * slice + j * dims[0] + i; // i, j, k
+    // ids[1] = ids[0] + 1; // i+1, j, k
+    // ids[2] = ids[0] + dims[0]; // i, j+1, k
+    // ids[3] = ids[2] + 1; // i+1, j+1, k
+    // ids[4] = ids[0] + slice; // i, j, k+1
+    // ids[5] = ids[4] + 1; // i+1, j, k+1
+    // ids[6] = ids[4] + dims[0]; // i, j+1, k+1
+    // ids[7] = ids[6] + 1; // i+1, j+1, k+1
+
+    // // Now retrieve the scalars
+    // for (let ii = 0; ii < 8; ++ii) {
+    //   voxelScalars[ii] = s[ids[ii]];
+    // }
+
+    // const CASE_MASK = [1, 2, 4, 8, 16, 32, 64, 128];
+    // const VERT_MAP = [0, 1, 3, 2, 4, 5, 7, 6];
+
+    // let index = 0;
+    // for (let idx = 0; idx < 8; idx++) {
+    //   if (voxelScalars[VERT_MAP[idx]] >= cVal) {
+    //     index |= CASE_MASK[idx]; // eslint-disable-line no-bitwise
+    //   }
+    // }
+    
+    console.log('normal: ' + g);
     model.interactor.render();
   };
 }

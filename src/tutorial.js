@@ -13,13 +13,16 @@ var descs = [
         proteome-to-phenome analysis. The nanometer-scale protein interactions and micrometer-scale 
         cellular morphogenesis are intimately linked with each other. This platform depicts the 
         neuron volume morphology/complexity with the protein interactions over time.</p>
-        <p>The layout follows the <i>three-pane interface</i> with the menu at the bottom.</p>
-        <p>On the left, it is the <b>Viewer</b> pane. It displays the neuron volume in either 
-        surface or voxel modes. The option of each mode is on the top-left.</p>
-        <p>The <b>Template</b> pane on the top-right shows the compartments of aCC prototype 
-        of different instars.</p>
-        <p>The <b>Network</b> pane on the bottom-right shows the collection of co-expressed 
-        proteins over neurons.</p>`,
+        <p>The layout follows the <i>three-pane interface</i> with the menu at the bottom.
+        <ul>
+        <li><b>Viewer</b> pane on the left displays the neuron volume in either surface or 
+        voxel modes (switch modes in menu). Arrows indicate axes (X=red, Y=green, Z=blue.)</li>
+        <li><b>Template</b> pane on the top-right shows the compartments of aCC prototype 
+        of different instars.</li>
+        <li><b>Network</b> pane on the bottom-right shows the collection of co-expressed 
+        proteins over neurons.</li>
+        </ul>
+        </p>`,
     `<p>The Viewer pane has two modes: surface and voxel.</p>
         <p>In the surface mode, the boundary of the neuron is displayed as a surface. While, colors encode 
         the concentration of protein interaction. The <b>Depth</b> parameter adjusts the depth from the surface.
